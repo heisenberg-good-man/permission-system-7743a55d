@@ -486,6 +486,7 @@ const saveOffer = async () => {
       }
       alert('Offer创建成功')
       await router.push(`/offers/${newId}`)
+      await loadData(newId)
     } else {
       await offersApi.updateOffer(route.params.id, formData.value)
       alert('Offer信息更新成功')
