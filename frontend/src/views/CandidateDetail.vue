@@ -90,7 +90,16 @@
           </div>
         </div>
         <div class="card">
-          <h2>📋 Offer记录</h2>
+          <div class="card-header">
+            <h2>📋 Offer记录</h2>
+            <button 
+              v-if="applications.length > 0" 
+              class="btn-create-offer" 
+              @click="$router.push(`/offers/create?application_id=${applications[0].id}`)"
+            >
+              + 发放Offer
+            </button>
+          </div>
           <div class="offers-list" v-if="offers.length > 0">
             <div v-for="offer in offers" :key="offer.id" class="offer-item" @click="$router.push(`/offers/${offer.id}`)">
               <div class="offer-header">
@@ -269,6 +278,31 @@ onMounted(() => {
   padding: 24px;
   border-radius: 12px;
   margin-bottom: 20px;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.card-header h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.btn-create-offer {
+  padding: 8px 16px;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+.btn-create-offer:hover {
+  background: #f57c00;
 }
 .card h2 {
   font-size: 18px;

@@ -23,7 +23,7 @@
           <h1>{{ isEdit ? '编辑Offer' : (isCreate ? '创建Offer' : 'Offer详情') }}</h1>
           <p>{{ job?.title || '未关联职位' }} - {{ candidate?.name || '未关联候选人' }}</p>
         </div>
-        <div class="detail-container" v-if="offer || isCreate">
+        <div class="detail-container" v-if="isCreate || offer">
         <div class="left-panel">
           <div class="section-card">
             <h3>Offer信息</h3>
@@ -53,21 +53,21 @@
             <h3>关联信息</h3>
             <div class="info-row">
               <span class="label">职位</span>
-              <span class="value">{{ job?.title }}</span>
+              <span class="value">{{ job?.title || '未关联职位' }}</span>
             </div>
             <div class="info-row">
               <span class="label">公司</span>
-              <span class="value">{{ job?.company }}</span>
+              <span class="value">{{ job?.company || '未关联公司' }}</span>
             </div>
             <div class="info-row">
               <span class="label">候选人</span>
-              <span class="value">{{ candidate?.name }}</span>
+              <span class="value">{{ candidate?.name || '未关联候选人' }}</span>
             </div>
             <div class="info-row">
               <span class="label">投递状态</span>
               <span class="value">{{ getAppStatusText(application?.status) }}</span>
             </div>
-            <div class="action-link" @click="$router.push(`/applications/${application?.id}`)">
+            <div class="action-link" v-if="application?.id" @click="$router.push(`/applications/${application.id}`)">
               → 查看投递详情
             </div>
             <div class="action-link" v-if="offer?.interview_id" @click="$router.push(`/interviews/${offer.interview_id}`)">
@@ -95,8 +95,15 @@
               </div>
               <div class="summary-notes">
                 <span class="summary-label">反馈摘要</span>
-                <p>{{ latestInterview.notes }}</p>
+                <p>{{ latestInterview.notes || '暂无反馈内容' }}</p>
               </div>
+            </div>
+          </div>
+          <div class="section-card" v-else-if="!isCreate && application?.id">
+            <h3>最近面试反馈</h3>
+            <div class="empty-state">
+              <div class="empty-icon">📝</div>
+              <div class="empty-text">暂无面试反馈记录</div>
             </div>
           </div>
         </div>
@@ -119,42 +126,46 @@
           </div>
           <div class="section-card">
             <h3>状态时间线</h3>
-            <div class="timeline">
+            <div class="timeline" v-if="offer">
               <div class="timeline-item">
                 <div class="timeline-dot"></div>
                 <div class="timeline-content">
                   <div class="timeline-title">创建Offer</div>
-                  <div class="timeline-time">{{ formatDateTime(offer?.created_at) }}</div>
+                  <div class="timeline-time">{{ formatDateTime(offer.created_at) }}</div>
                 </div>
               </div>
-              <div class="timeline-item" v-if="offer?.status === 'accepted'">
+              <div class="timeline-item" v-if="offer.status === 'accepted'">
                 <div class="timeline-dot accepted"></div>
                 <div class="timeline-content">
                   <div class="timeline-title">候选人已接受</div>
-                  <div class="timeline-time">{{ formatDateTime(offer?.updated_at) }}</div>
+                  <div class="timeline-time">{{ formatDateTime(offer.updated_at) }}</div>
                 </div>
               </div>
-              <div class="timeline-item" v-if="offer?.status === 'rejected'">
+              <div class="timeline-item" v-if="offer.status === 'rejected'">
                 <div class="timeline-dot rejected"></div>
                 <div class="timeline-content">
                   <div class="timeline-title">候选人已拒绝</div>
-                  <div class="timeline-time">{{ formatDateTime(offer?.updated_at) }}</div>
+                  <div class="timeline-time">{{ formatDateTime(offer.updated_at) }}</div>
                 </div>
               </div>
-              <div class="timeline-item" v-if="offer?.status === 'withdrawn'">
+              <div class="timeline-item" v-if="offer.status === 'withdrawn'">
                 <div class="timeline-dot withdrawn"></div>
                 <div class="timeline-content">
                   <div class="timeline-title">Offer已撤回</div>
-                  <div class="timeline-time">{{ formatDateTime(offer?.updated_at) }}</div>
+                  <div class="timeline-time">{{ formatDateTime(offer.updated_at) }}</div>
                 </div>
               </div>
-              <div class="timeline-item" v-if="offer?.status === 'pending_onboarding'">
+              <div class="timeline-item" v-if="offer.status === 'pending_onboarding'">
                 <div class="timeline-dot pending_onboarding"></div>
                 <div class="timeline-content">
                   <div class="timeline-title">待入职</div>
-                  <div class="timeline-time">{{ formatDateTime(offer?.updated_at) }}</div>
+                  <div class="timeline-time">{{ formatDateTime(offer.updated_at) }}</div>
                 </div>
               </div>
+            </div>
+            <div class="empty-state" v-else>
+              <div class="empty-icon">⏳</div>
+              <div class="empty-text">创建Offer后将显示状态时间线</div>
             </div>
           </div>
           <div class="section-card">
@@ -179,7 +190,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { offersApi, applicationsApi, jobsApi, candidatesApi, interviewsApi } from '../api'
 
@@ -196,6 +207,7 @@ const error = ref(null)
 const notFound = ref(false)
 const isCreate = computed(() => route.params.id === 'create')
 const isEdit = ref(false)
+const currentOfferId = ref(route.params.id)
 
 const formData = ref({
   position_title: '',
@@ -232,7 +244,7 @@ const getAppStatusText = (status) => {
     'rejected': '已拒绝',
     'hired': '已录用'
   }
-  return map[status] || status
+  return map[status] || (status ? status : '未知')
 }
 
 const getInterviewStatusText = (status) => {
@@ -272,30 +284,36 @@ const clearAllData = () => {
 }
 
 const loadOfferDetail = async (offerId) => {
-  const res = await offersApi.getOffer(offerId)
-  if (!res.data) {
-    return null
+  try {
+    const res = await offersApi.getOffer(offerId)
+    return res.data || null
+  } catch (e) {
+    throw e
   }
-  return res.data
 }
 
 const loadApplicationData = async (appId) => {
-  const appRes = await applicationsApi.getApplication(appId)
-  if (!appRes.data) {
+  try {
+    const appRes = await applicationsApi.getApplication(appId)
+    if (!appRes.data) {
+      return null
+    }
+    
+    const [jobRes, candidateRes, interviewsRes] = await Promise.all([
+      jobsApi.getJob(appRes.data.job_id),
+      candidatesApi.getCandidate(appRes.data.candidate_id),
+      interviewsApi.getInterviews({ application_id: appId })
+    ])
+    
+    return {
+      application: appRes.data,
+      job: jobRes.data,
+      candidate: candidateRes.data,
+      interviews: interviewsRes.data || []
+    }
+  } catch (e) {
+    console.error('Failed to load application data:', e)
     return null
-  }
-  
-  const [jobRes, candidateRes, interviewsRes] = await Promise.all([
-    jobsApi.getJob(appRes.data.job_id),
-    candidatesApi.getCandidate(appRes.data.candidate_id),
-    interviewsApi.getInterviews({ application_id: appId })
-  ])
-  
-  return {
-    application: appRes.data,
-    job: jobRes.data,
-    candidate: candidateRes.data,
-    interviews: interviewsRes.data
   }
 }
 
@@ -425,9 +443,8 @@ const saveOffer = async () => {
       })
       alert('Offer创建成功')
       await router.push(`/offers/${res.data.id}`)
-      setTimeout(() => {
-        loadData()
-      }, 100)
+      await nextTick()
+      await loadData()
     } else {
       await offersApi.updateOffer(route.params.id, formData.value)
       alert('Offer信息更新成功')
@@ -464,8 +481,23 @@ onMounted(() => {
   loadData()
 })
 
+watch(() => route.params.id, (newId, oldId) => {
+  if (newId !== oldId) {
+    currentOfferId.value = newId
+    loadData()
+  }
+})
+
+watch(() => route.fullPath, () => {
+  if (route.params.id !== currentOfferId.value) {
+    currentOfferId.value = route.params.id
+    loadData()
+  }
+})
+
 onBeforeRouteUpdate((to, from) => {
-  if (to.params.id !== from.params.id) {
+  if (to.params.id !== from.params.id || to.query.application_id !== from.query.application_id) {
+    currentOfferId.value = to.params.id
     loadData()
   }
 })
@@ -811,5 +843,19 @@ onBeforeRouteUpdate((to, from) => {
 .btn-back-home:hover,
 .btn-retry:hover {
   background: #5a6fd6;
+}
+.empty-state {
+  text-align: center;
+  padding: 30px 20px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+.empty-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+.empty-text {
+  font-size: 14px;
+  color: #999;
 }
 </style>
