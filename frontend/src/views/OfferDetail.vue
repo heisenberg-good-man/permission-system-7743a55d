@@ -23,8 +23,8 @@
       </div>
       <div v-else>
         <div class="page-header">
-          <h1>{{ isEdit ? '编辑Offer' : (currentMode === 'create' ? '创建Offer' : 'Offer详情') }}</h1>
-          <p>{{ job?.title || '未关联职位' }} - {{ candidate?.name || '未关联候选人' }}</p>
+          <h1>{{ pageTitle }}</h1>
+          <p>{{ pageSubtitle }}</p>
         </div>
         <div class="related-error-banner" v-if="relatedDataError">
           <span class="related-error-icon">⚠️</span>
@@ -199,7 +199,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { offersApi, applicationsApi, jobsApi, candidatesApi, interviewsApi } from '../api'
 
@@ -218,6 +218,18 @@ const currentMode = ref('create')
 const isEdit = ref(false)
 const relatedDataError = ref(null)
 let loadRequestId = 0
+
+const pageTitle = computed(() => {
+  if (isEdit.value) return '编辑Offer'
+  if (currentMode.value === 'create') return '创建Offer'
+  return offer.value ? `Offer详情 - ${offer.value.id}` : 'Offer详情'
+})
+
+const pageSubtitle = computed(() => {
+  const jobTitle = job.value?.title || '未关联职位'
+  const candidateName = candidate.value?.name || '未关联候选人'
+  return `${jobTitle} - ${candidateName}`
+})
 
 const formData = ref({
   position_title: '',
