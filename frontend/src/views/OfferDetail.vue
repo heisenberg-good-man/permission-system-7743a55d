@@ -16,7 +16,10 @@
         <div class="error-icon">⚠️</div>
         <div class="error-title">加载失败</div>
         <div class="error-message">{{ error }}</div>
-        <button class="btn-retry" @click="loadData()">重新加载</button>
+        <div class="error-actions">
+          <button class="btn-retry" @click="loadData()">重新加载</button>
+          <button class="btn-back-home" @click="router.push('/offers')">返回Offer列表</button>
+        </div>
       </div>
       <div v-else>
         <div class="page-header">
@@ -27,6 +30,7 @@
           <span class="related-error-icon">⚠️</span>
           <span class="related-error-text">{{ relatedDataError }}</span>
           <button class="related-error-retry" @click="loadData()">重新加载</button>
+          <button v-if="currentMode === 'create'" class="related-error-retry" @click="router.push('/applications')">去投递列表</button>
         </div>
         <div class="detail-container" v-if="currentMode === 'create' || offer">
         <div class="left-panel">
@@ -837,6 +841,11 @@ onBeforeRouteUpdate((to, from) => {
   font-size: 16px;
   color: #999;
   margin-bottom: 24px;
+}
+.error-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
 }
 .btn-back-home,
 .btn-retry {
