@@ -459,8 +459,14 @@ const saveOffer = async () => {
         application_id: route.query.application_id,
         interview_id: route.query.interview_id
       })
+      const newId = res.data?.id
+      if (!newId) {
+        alert('创建成功但返回数据异常，请返回列表查看')
+        await router.push('/offers')
+        return
+      }
       alert('Offer创建成功')
-      await router.push(`/offers/${res.data.id}`)
+      await router.push(`/offers/${newId}`)
     } else {
       await offersApi.updateOffer(route.params.id, formData.value)
       alert('Offer信息更新成功')
