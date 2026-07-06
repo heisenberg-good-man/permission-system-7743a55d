@@ -861,6 +861,7 @@ def update_offer_status(offer_id: str, data: dict):
     if new_status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"无效的状态值，可选值：{', '.join(valid_statuses)}")
     
+    old_status = mock_offers[index]["status"]
     mock_offers[index]["status"] = new_status
     mock_offers[index]["updated_at"] = datetime.now().isoformat()
     
@@ -873,6 +874,13 @@ def update_offer_status(offer_id: str, data: dict):
             mock_applications[app_index]["status"] = "rejected"
         elif new_status == "pending_onboarding":
             mock_applications[app_index]["status"] = "hired"
+        elif new_status == "pending":
+            if mock_applications[app_index]["status"] in ["hired", "rejected"]:
+                mock_applications[app_index]["status"] = "interviewing"
+        elif new_status == "withdrawn":
+            if mock_applications[app_index]["status"] == "hired":
+                mock_applications[app_index]["status"] = "interviewing"
+        mock_applications[app_index]["updated_at"] = datetime.now().isoformat()
     
     return mock_offers[index]
 

@@ -200,7 +200,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { offersApi, applicationsApi, jobsApi, candidatesApi, interviewsApi } from '../api'
 
@@ -348,6 +348,7 @@ const loadData = async (targetId = null, targetQuery = null) => {
     error.value = null
     notFound.value = false
     relatedDataError.value = null
+    isEdit.value = false
     clearAllData()
 
     const currentId = targetId || route.params.id
@@ -486,6 +487,7 @@ const saveOffer = async () => {
       }
       alert('Offer创建成功')
       await router.push(`/offers/${newId}`)
+      await nextTick()
       await loadData(newId)
     } else {
       await offersApi.updateOffer(route.params.id, formData.value)
@@ -524,16 +526,21 @@ onMounted(() => {
 })
 
 onBeforeRouteUpdate((to, from) => {
-  if (to.params.id !== from.params.id || to.query.application_id !== from.query.application_id) {
+  if (to.params.id !== from.params.id || 
+      to.query.application_id !== from.query.application_id ||
+      to.query.interview_id !== from.query.interview_id) {
     loadData(to.params.id, to.query)
   }
 })
 
-watch(() => route.params.id, (newId, oldId) => {
-  if (newId !== oldId && newId !== undefined) {
-    loadData(newId, route.query)
-  }
-})
+watch(() => [route.params.id, route.query.application_id, route.query.interview_id], 
+  ([newId, newAppId, newInterviewId], [oldId, oldAppId, oldInterviewId]) => {
+    if (newId !== oldId || newAppId !== oldAppId || newInterviewId !== oldInterviewId) {
+      loadData(newId, route.query)
+    }
+  },
+  { immediate: false }
+)
 </script>
 
 <style scoped>
