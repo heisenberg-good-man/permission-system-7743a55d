@@ -20,33 +20,38 @@
       </div>
       <div v-else>
         <div class="page-header">
-          <h1>{{ isEdit ? '编辑Offer' : (isCreate ? '创建Offer' : 'Offer详情') }}</h1>
+          <h1>{{ isEdit ? '编辑Offer' : (currentMode === 'create' ? '创建Offer' : 'Offer详情') }}</h1>
           <p>{{ job?.title || '未关联职位' }} - {{ candidate?.name || '未关联候选人' }}</p>
         </div>
-        <div class="detail-container" v-if="isCreate || offer">
+        <div class="related-error-banner" v-if="relatedDataError">
+          <span class="related-error-icon">⚠️</span>
+          <span class="related-error-text">{{ relatedDataError }}</span>
+          <button class="related-error-retry" @click="loadData()">重新加载</button>
+        </div>
+        <div class="detail-container" v-if="currentMode === 'create' || offer">
         <div class="left-panel">
           <div class="section-card">
             <h3>Offer信息</h3>
             <div class="form-group">
               <label>职位名称</label>
-              <input type="text" v-model="formData.position_title" :disabled="!isEdit && !isCreate" placeholder="请输入职位名称" />
+              <input type="text" v-model="formData.position_title" :disabled="!isEdit && currentMode !== 'create'" placeholder="请输入职位名称" />
             </div>
             <div class="form-group">
               <label>薪资范围（K）</label>
               <div class="salary-input">
-                <input type="number" v-model="formData.salary_min" :disabled="!isEdit && !isCreate" placeholder="最低" />
+                <input type="number" v-model="formData.salary_min" :disabled="!isEdit && currentMode !== 'create'" placeholder="最低" />
                 <span class="salary-separator">-</span>
-                <input type="number" v-model="formData.salary_max" :disabled="!isEdit && !isCreate" placeholder="最高" />
+                <input type="number" v-model="formData.salary_max" :disabled="!isEdit && currentMode !== 'create'" placeholder="最高" />
                 <span class="salary-unit">K</span>
               </div>
             </div>
             <div class="form-group">
               <label>入职时间</label>
-              <input type="datetime-local" v-model="formData.start_date" :disabled="!isEdit && !isCreate" />
+              <input type="datetime-local" v-model="formData.start_date" :disabled="!isEdit && currentMode !== 'create'" />
             </div>
             <div class="form-group">
               <label>备注</label>
-              <textarea v-model="formData.notes" rows="4" :disabled="!isEdit && !isCreate" placeholder="请输入Offer备注，如福利、奖金等信息"></textarea>
+              <textarea v-model="formData.notes" rows="4" :disabled="!isEdit && currentMode !== 'create'" placeholder="请输入Offer备注，如福利、奖金等信息"></textarea>
             </div>
           </div>
           <div class="section-card">
@@ -99,7 +104,7 @@
               </div>
             </div>
           </div>
-          <div class="section-card" v-else-if="!isCreate && application?.id">
+          <div class="section-card" v-else-if="currentMode !== 'create' && application?.id">
             <h3>最近面试反馈</h3>
             <div class="empty-state">
               <div class="empty-icon">📝</div>
@@ -113,7 +118,7 @@
               <h3>Offer状态</h3>
               <span class="status-badge" :class="formData.status">{{ getStatusText(formData.status) }}</span>
             </div>
-            <div class="status-selector" v-if="!isCreate">
+            <div class="status-selector" v-if="currentMode !== 'create'">
               <button 
                 v-for="status in statusOptions" 
                 :key="status.value"
@@ -171,13 +176,13 @@
           <div class="section-card">
             <h3>操作</h3>
             <div class="action-buttons">
-              <button v-if="isEdit || isCreate" class="btn-save" @click="saveOffer">
-                {{ isCreate ? '创建Offer' : '保存修改' }}
+              <button v-if="isEdit || currentMode === 'create'" class="btn-save" @click="saveOffer">
+                {{ currentMode === 'create' ? '创建Offer' : '保存修改' }}
               </button>
-              <button v-if="!isCreate && !isEdit" class="btn-edit" @click="enterEditMode">
+              <button v-if="currentMode !== 'create' && !isEdit" class="btn-edit" @click="enterEditMode">
                 编辑Offer
               </button>
-              <button v-if="!isCreate && formData.status !== 'withdrawn'" class="btn-withdraw" @click="withdrawOffer">
+              <button v-if="currentMode !== 'create' && formData.status !== 'withdrawn'" class="btn-withdraw" @click="withdrawOffer">
                 撤回Offer
               </button>
             </div>
@@ -190,7 +195,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { offersApi, applicationsApi, jobsApi, candidatesApi, interviewsApi } from '../api'
 
@@ -205,9 +210,10 @@ const latestInterview = ref(null)
 const loading = ref(true)
 const error = ref(null)
 const notFound = ref(false)
-const isCreate = computed(() => route.params.id === 'create')
+const currentMode = ref('create')
 const isEdit = ref(false)
-const currentOfferId = ref(route.params.id)
+const relatedDataError = ref(null)
+let loadRequestId = 0
 
 const formData = ref({
   position_title: '',
@@ -272,6 +278,7 @@ const clearAllData = () => {
   latestInterview.value = null
   error.value = null
   notFound.value = false
+  relatedDataError.value = null
   isEdit.value = false
   formData.value = {
     position_title: '',
@@ -317,31 +324,37 @@ const loadApplicationData = async (appId) => {
   }
 }
 
-const loadData = async () => {
+const loadData = async (targetId = null, targetQuery = null) => {
+  const requestId = ++loadRequestId
   try {
     loading.value = true
     error.value = null
     notFound.value = false
+    relatedDataError.value = null
     clearAllData()
-    
-    const currentId = route.params.id
-    
-    if (currentId === 'create') {
-      const appId = route.query.application_id
+
+    const currentId = targetId || route.params.id
+    const query = targetQuery || route.query
+
+    currentMode.value = currentId === 'create' ? 'create' : 'detail'
+
+    if (currentMode.value === 'create') {
+      const appId = query.application_id
       if (appId) {
         const appData = await loadApplicationData(appId)
+        if (requestId !== loadRequestId) return
         if (appData) {
           application.value = appData.application
           job.value = appData.job
           candidate.value = appData.candidate
           interviews.value = appData.interviews
-          
+
           if (appData.interviews.length > 0) {
             latestInterview.value = appData.interviews.reduce((latest, current) => {
               return new Date(current.time) > new Date(latest.time) ? current : latest
             })
           }
-          
+
           if (job.value) {
             formData.value.position_title = job.value.title
           }
@@ -351,11 +364,12 @@ const loadData = async () => {
       }
     } else {
       const offerData = await loadOfferDetail(currentId)
+      if (requestId !== loadRequestId) return
       if (!offerData) {
         notFound.value = true
         return
       }
-      
+
       offer.value = offerData
       formData.value = {
         position_title: offerData.position_title,
@@ -365,29 +379,31 @@ const loadData = async () => {
         notes: offerData.notes,
         status: offerData.status
       }
-      
+
       const appId = offerData.application_id
       if (appId) {
         const appData = await loadApplicationData(appId)
+        if (requestId !== loadRequestId) return
         if (appData) {
           application.value = appData.application
           job.value = appData.job
           candidate.value = appData.candidate
           interviews.value = appData.interviews
-          
+
           if (appData.interviews.length > 0) {
             latestInterview.value = appData.interviews.reduce((latest, current) => {
               return new Date(current.time) > new Date(latest.time) ? current : latest
             })
           }
         } else {
-          error.value = '无法获取关联投递信息'
+          relatedDataError.value = '关联投递信息加载失败，请稍后重试或联系管理员'
         }
       } else {
-        error.value = '无法获取关联投递信息'
+        relatedDataError.value = '该 Offer 未关联投递记录，无法显示候选人、职位等信息'
       }
     }
   } catch (errorResponse) {
+    if (requestId !== loadRequestId) return
     console.error('Failed to load data:', errorResponse)
     if (errorResponse.response?.status === 404) {
       notFound.value = true
@@ -395,7 +411,9 @@ const loadData = async () => {
       error.value = errorResponse.response?.data?.detail || '加载失败，请刷新重试'
     }
   } finally {
-    loading.value = false
+    if (requestId === loadRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -405,7 +423,7 @@ const enterEditMode = () => {
 
 const saveOffer = async () => {
   try {
-    if (!route.query.application_id && isCreate.value) {
+    if (!route.query.application_id && currentMode.value === 'create') {
       alert('请先选择投递记录')
       return
     }
@@ -435,7 +453,7 @@ const saveOffer = async () => {
       return
     }
     
-    if (isCreate.value) {
+    if (currentMode.value === 'create') {
       const res = await offersApi.createOffer({
         ...formData.value,
         application_id: route.query.application_id,
@@ -443,8 +461,6 @@ const saveOffer = async () => {
       })
       alert('Offer创建成功')
       await router.push(`/offers/${res.data.id}`)
-      await nextTick()
-      await loadData()
     } else {
       await offersApi.updateOffer(route.params.id, formData.value)
       alert('Offer信息更新成功')
@@ -481,24 +497,21 @@ onMounted(() => {
   loadData()
 })
 
-watch(() => route.params.id, (newId, oldId) => {
-  if (newId !== oldId) {
-    currentOfferId.value = newId
-    loadData()
-  }
-})
-
-watch(() => route.fullPath, () => {
-  if (route.params.id !== currentOfferId.value) {
-    currentOfferId.value = route.params.id
-    loadData()
-  }
-})
-
-onBeforeRouteUpdate((to, from) => {
+onBeforeRouteUpdate(async (to, from) => {
   if (to.params.id !== from.params.id || to.query.application_id !== from.query.application_id) {
-    currentOfferId.value = to.params.id
-    loadData()
+    await loadData(to.params.id, to.query)
+  }
+})
+
+watch(() => route.params.id, async (newId, oldId) => {
+  if (newId !== oldId) {
+    await loadData(newId, route.query)
+  }
+})
+
+watch(() => route.query.application_id, async (newAppId, oldAppId) => {
+  if (newAppId !== oldAppId && currentMode.value === 'create') {
+    await loadData('create', route.query)
   }
 })
 </script>
@@ -857,5 +870,36 @@ onBeforeRouteUpdate((to, from) => {
 .empty-text {
   font-size: 14px;
   color: #999;
+}
+.related-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff8e1;
+  border: 1px solid #ffe0b2;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #e65100;
+}
+.related-error-icon {
+  font-size: 18px;
+}
+.related-error-text {
+  flex: 1;
+}
+.related-error-retry {
+  padding: 6px 14px;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+.related-error-retry:hover {
+  background: #f57c00;
 }
 </style>

@@ -110,8 +110,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, nextTick, watch } from 'vue'
+import { useRoute, onBeforeRouteUpdate } from 'vue-router'
 import { applicationsApi, jobsApi, candidatesApi, messagesApi } from '../api'
 
 const route = useRoute()
@@ -219,6 +219,18 @@ const scrollToBottom = () => {
 
 onMounted(() => {
   loadData()
+})
+
+onBeforeRouteUpdate(async (to, from) => {
+  if (to.params.id !== from.params.id) {
+    await loadData()
+  }
+})
+
+watch(() => route.params.id, async (newId, oldId) => {
+  if (newId !== oldId) {
+    await loadData()
+  }
 })
 </script>
 
