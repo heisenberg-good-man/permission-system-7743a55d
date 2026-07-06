@@ -58,7 +58,7 @@
                 <span class="app-status" :class="app.status">{{ getStatusText(app.status) }}</span>
               </div>
               <div class="app-meta">
-                <span>投递时间：{{ formatDate(app.created_at) }}</span>
+                <span>投递时间：{{ formatDate(app.applied_at) }}</span>
               </div>
               <div class="app-arrow">→</div>
             </div>
@@ -66,6 +66,27 @@
           <div class="empty-apps" v-else>
             <div class="empty-icon">📭</div>
             <div class="empty-text">暂无投递记录</div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>📅 面试记录</h2>
+          <div class="interviews-list" v-if="interviews.length > 0">
+            <div v-for="interview in interviews" :key="interview.id" class="interview-item" @click="$router.push(`/interviews/${interview.id}`)">
+              <div class="interview-header">
+                <span class="interview-round">{{ interview.round }}</span>
+                <span class="interview-status" :class="interview.status">{{ getInterviewStatusText(interview.status) }}</span>
+              </div>
+              <div class="interview-meta">
+                <span>👤 {{ interview.interviewer }}</span>
+                <span>🕐 {{ formatDateTime(interview.time) }}</span>
+              </div>
+              <div class="interview-method">📹 {{ getMethodText(interview.method) }}</div>
+              <div class="interview-arrow">→</div>
+            </div>
+          </div>
+          <div class="empty-interviews" v-else>
+            <div class="empty-icon">📅</div>
+            <div class="empty-text">暂无面试记录</div>
           </div>
         </div>
       </div>
@@ -80,12 +101,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { candidatesApi, applicationsApi, jobsApi } from '../api'
+import { candidatesApi, applicationsApi, jobsApi, interviewsApi } from '../api'
 
 const route = useRoute()
 const candidate = ref(null)
 const applications = ref([])
 const jobs = ref({})
+const interviews = ref([])
 const loading = ref(true)
 
 const getJobTitle = (jobId) => {
@@ -95,12 +117,31 @@ const getJobTitle = (jobId) => {
 const getStatusText = (status) => {
   const statusMap = {
     'pending': '待处理',
-    'reviewing': '审核中',
-    'interview': '面试中',
-    'offer': '已发Offer',
-    'rejected': '已拒绝'
+    'communicating': '已沟通',
+    'interviewing': '面试中',
+    'rejected': '已拒绝',
+    'hired': '已录用'
   }
   return statusMap[status] || status
+}
+
+const getInterviewStatusText = (status) => {
+  const map = {
+    'pending': '待安排',
+    'scheduled': '已安排',
+    'completed': '已完成',
+    'cancelled': '已取消'
+  }
+  return map[status] || status
+}
+
+const getMethodText = (method) => {
+  const map = {
+    '视频面试': '视频面试',
+    '现场面试': '现场面试',
+    '电话面试': '电话面试'
+  }
+  return map[method] || method
 }
 
 const formatDate = (dateStr) => {
@@ -109,15 +150,23 @@ const formatDate = (dateStr) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
 const loadData = async () => {
   try {
     loading.value = true
-    const [candidateRes, appsRes] = await Promise.all([
+    const [candidateRes, appsRes, interviewsRes] = await Promise.all([
       candidatesApi.getCandidate(route.params.id),
-      applicationsApi.getApplications({ candidate_id: route.params.id })
+      applicationsApi.getApplications({ candidate_id: route.params.id }),
+      interviewsApi.getInterviews({ candidate_id: route.params.id })
     ])
     candidate.value = candidateRes.data
     applications.value = appsRes.data
+    interviews.value = interviewsRes.data
     
     const jobIds = [...new Set(applications.value.map(a => a.job_id))]
     const jobPromises = jobIds.map(id => jobsApi.getJob(id))
@@ -274,21 +323,21 @@ onMounted(() => {
   background: #fff3e0;
   color: #ff9800;
 }
-.app-status.reviewing {
+.app-status.communicating {
   background: #e3f2fd;
   color: #2196f3;
 }
-.app-status.interview {
+.app-status.interviewing {
   background: #e8f5e9;
   color: #4caf50;
 }
-.app-status.offer {
-  background: #fce4ec;
-  color: #e91e63;
+.app-status.hired {
+  background: #f3e5f5;
+  color: #9c27b0;
 }
 .app-status.rejected {
-  background: #f5f5f5;
-  color: #999;
+  background: #ffebee;
+  color: #d32f2f;
 }
 .app-meta {
   font-size: 12px;
@@ -310,6 +359,78 @@ onMounted(() => {
 .empty-text {
   font-size: 14px;
   color: #999;
+}
+.interviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.interview-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.interview-item:hover {
+  background: #f0f5ff;
+}
+.interview-header {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.interview-round {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: #f0f5ff;
+  color: #667eea;
+  border-radius: 4px;
+}
+.interview-status {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+.interview-status.pending {
+  background: #fff3e0;
+  color: #ff9800;
+}
+.interview-status.scheduled {
+  background: #e3f2fd;
+  color: #2196f3;
+}
+.interview-status.completed {
+  background: #e8f5e9;
+  color: #4caf50;
+}
+.interview-status.cancelled {
+  background: #f5f5f5;
+  color: #999;
+}
+.interview-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 4px;
+}
+.interview-method {
+  font-size: 12px;
+  color: #999;
+}
+.interview-arrow {
+  font-size: 20px;
+  color: #ccc;
+  margin-left: 12px;
+}
+.empty-interviews {
+  text-align: center;
+  padding: 40px 20px;
 }
 .loading {
   text-align: center;

@@ -1,7 +1,11 @@
 <template>
   <div class="application-detail-page">
     <button class="btn-back" @click="$router.back()">← 返回列表</button>
-    <div class="detail-container" v-if="application">
+    <div class="loading" v-if="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">加载中...</div>
+    </div>
+    <div class="detail-container" v-if="!loading && application && job && candidate">
       <div class="left-panel">
         <div class="section-card">
           <div class="section-header">
@@ -48,6 +52,12 @@
               {{ status.label }}
             </button>
           </div>
+        </div>
+        <div class="section-card">
+          <h3>操作</h3>
+          <button class="btn-interview" @click="$router.push(`/interviews/create?application_id=${route.params.id}`)">
+            📅 安排面试
+          </button>
         </div>
       </div>
       <div class="right-panel">
@@ -109,6 +119,7 @@ const messages = ref([])
 const newMessage = ref('')
 const messagesContainer = ref(null)
 const currentSenderType = ref('company')
+const loading = ref(true)
 
 const statusOptions = [
   { value: 'pending', label: '待处理' },
@@ -143,6 +154,7 @@ const formatTime = (dateStr) => {
 
 const loadData = async () => {
   try {
+    loading.value = true
     const appRes = await applicationsApi.getApplication(route.params.id)
     application.value = appRes.data
     
@@ -158,6 +170,8 @@ const loadData = async () => {
     scrollToBottom()
   } catch (error) {
     console.error('Failed to load data:', error)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -432,5 +446,40 @@ onMounted(() => {
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
+}
+.btn-interview {
+  padding: 12px 24px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  width: 100%;
+  transition: background 0.2s;
+}
+.btn-interview:hover {
+  background: #45a049;
+}
+.loading {
+  text-align: center;
+  padding: 80px 20px;
+}
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.loading-text {
+  font-size: 14px;
+  color: #999;
 }
 </style>

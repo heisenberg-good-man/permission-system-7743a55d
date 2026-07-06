@@ -68,12 +68,29 @@ class Message(BaseModel):
     sent_at: datetime
 
 
+class Interview(BaseModel):
+    id: str
+    application_id: str
+    interviewer: str
+    round: str
+    method: str
+    time: datetime
+    location: str
+    status: str
+    notes: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class Stats(BaseModel):
     total_jobs: int
     active_jobs: int
     total_applications: int
     pending_applications: int
     interviewing_applications: int
+    total_interviews: int
+    scheduled_interviews: int
+    completed_interviews: int
 
 
 mock_jobs = [
@@ -303,6 +320,61 @@ mock_messages = [
     }
 ]
 
+mock_interviews = [
+    {
+        "id": "interview-001",
+        "application_id": "app-003",
+        "interviewer": "李明",
+        "round": "初试",
+        "method": "视频面试",
+        "time": "2026-07-08T14:00:00",
+        "location": "https://meeting.example.com/abc123",
+        "status": "scheduled",
+        "notes": "候选人对产品经理职位有热情，重点考察产品思维和项目经验",
+        "created_at": "2026-06-29T10:00:00",
+        "updated_at": "2026-06-29T10:00:00"
+    },
+    {
+        "id": "interview-002",
+        "application_id": "app-001",
+        "interviewer": "王芳",
+        "round": "初试",
+        "method": "现场面试",
+        "time": "2026-07-06T10:00:00",
+        "location": "北京市朝阳区建国路88号SOHO现代城A座18层",
+        "status": "completed",
+        "notes": "技术能力较强，沟通表达流畅，建议进入复试",
+        "created_at": "2026-06-21T14:00:00",
+        "updated_at": "2026-07-06T11:30:00"
+    },
+    {
+        "id": "interview-003",
+        "application_id": "app-001",
+        "interviewer": "张伟",
+        "round": "复试",
+        "method": "视频面试",
+        "time": "2026-07-10T15:00:00",
+        "location": "https://meeting.example.com/xyz789",
+        "status": "scheduled",
+        "notes": "复试重点考察系统设计和团队协作能力",
+        "created_at": "2026-07-06T14:00:00",
+        "updated_at": "2026-07-06T14:00:00"
+    },
+    {
+        "id": "interview-004",
+        "application_id": "app-002",
+        "interviewer": "刘洋",
+        "round": "初试",
+        "method": "电话面试",
+        "time": "2026-07-07T11:00:00",
+        "location": "13800138002",
+        "status": "pending",
+        "notes": "先进行电话沟通了解基本情况",
+        "created_at": "2026-06-28T09:00:00",
+        "updated_at": "2026-06-28T09:00:00"
+    }
+]
+
 
 @app.get("/api/stats", response_model=Stats)
 def get_stats():
@@ -311,12 +383,18 @@ def get_stats():
     total_applications = len(mock_applications)
     pending_applications = sum(1 for app in mock_applications if app["status"] == "pending")
     interviewing_applications = sum(1 for app in mock_applications if app["status"] == "interviewing")
+    total_interviews = len(mock_interviews)
+    scheduled_interviews = sum(1 for i in mock_interviews if i["status"] == "scheduled")
+    completed_interviews = sum(1 for i in mock_interviews if i["status"] == "completed")
     return {
         "total_jobs": total_jobs,
         "active_jobs": active_jobs,
         "total_applications": total_applications,
         "pending_applications": pending_applications,
-        "interviewing_applications": interviewing_applications
+        "interviewing_applications": interviewing_applications,
+        "total_interviews": total_interviews,
+        "scheduled_interviews": scheduled_interviews,
+        "completed_interviews": completed_interviews
     }
 
 
@@ -522,6 +600,72 @@ def get_cities():
 @app.get("/api/statuses")
 def get_statuses():
     return ["active", "closed"]
+
+
+@app.get("/api/interviews", response_model=List[Interview])
+def get_interviews(application_id: Optional[str] = None, candidate_id: Optional[str] = None, status: Optional[str] = None):
+    result = mock_interviews.copy()
+    if application_id:
+        result = [i for i in result if i["application_id"] == application_id]
+    if candidate_id:
+        candidate_apps = [app["id"] for app in mock_applications if app["candidate_id"] == candidate_id]
+        result = [i for i in result if i["application_id"] in candidate_apps]
+    if status:
+        result = [i for i in result if i["status"] == status]
+    return result
+
+
+@app.get("/api/interviews/{interview_id}", response_model=Interview)
+def get_interview(interview_id: str):
+    interview = next((i for i in mock_interviews if i["id"] == interview_id), None)
+    if not interview:
+        raise HTTPException(status_code=404, detail="面试记录不存在")
+    return interview
+
+
+@app.post("/api/interviews", response_model=Interview)
+def create_interview(interview: dict):
+    application = next((app for app in mock_applications if app["id"] == interview["application_id"]), None)
+    if not application:
+        raise HTTPException(status_code=400, detail="投递记录不存在")
+    new_interview = {
+        "id": f"interview-{len(mock_interviews) + 1:03d}",
+        "application_id": interview.get("application_id"),
+        "interviewer": interview.get("interviewer", ""),
+        "round": interview.get("round", "初试"),
+        "method": interview.get("method", "视频面试"),
+        "time": interview.get("time"),
+        "location": interview.get("location", ""),
+        "status": interview.get("status", "pending"),
+        "notes": interview.get("notes", ""),
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat()
+    }
+    mock_interviews.append(new_interview)
+    return new_interview
+
+
+@app.put("/api/interviews/{interview_id}", response_model=Interview)
+def update_interview(interview_id: str, data: dict):
+    index = next((i for i, interview in enumerate(mock_interviews) if interview["id"] == interview_id), None)
+    if index is None:
+        raise HTTPException(status_code=404, detail="面试记录不存在")
+    mock_interviews[index].update(data)
+    mock_interviews[index]["updated_at"] = datetime.now().isoformat()
+    return mock_interviews[index]
+
+
+@app.put("/api/interviews/{interview_id}/status", response_model=Interview)
+def update_interview_status(interview_id: str, data: dict):
+    index = next((i for i, interview in enumerate(mock_interviews) if interview["id"] == interview_id), None)
+    if index is None:
+        raise HTTPException(status_code=404, detail="面试记录不存在")
+    new_status = data.get("status")
+    if new_status not in ["pending", "scheduled", "completed", "cancelled"]:
+        raise HTTPException(status_code=400, detail="无效的状态值")
+    mock_interviews[index]["status"] = new_status
+    mock_interviews[index]["updated_at"] = datetime.now().isoformat()
+    return mock_interviews[index]
 
 
 if __name__ == "__main__":

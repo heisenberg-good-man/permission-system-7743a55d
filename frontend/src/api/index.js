@@ -18,7 +18,7 @@ export const jobsApi = {
 }
 
 export const candidatesApi = {
-  getCandidates: () => api.get('/candidates'),
+  getCandidates: (params) => api.get('/candidates', { params }),
   getCandidate: (id) => api.get(`/candidates/${id}`),
   createCandidate: (data) => api.post('/candidates', data)
 }
@@ -33,6 +33,14 @@ export const applicationsApi = {
 export const messagesApi = {
   getMessages: (params) => api.get('/messages', { params }),
   createMessage: (data) => api.post('/messages', data)
+}
+
+export const interviewsApi = {
+  getInterviews: (params) => api.get('/interviews', { params }),
+  getInterview: (id) => api.get(`/interviews/${id}`),
+  createInterview: (data) => api.post('/interviews', data),
+  updateInterview: (id, data) => api.put(`/interviews/${id}`, data),
+  updateStatus: (id, status) => api.put(`/interviews/${id}/status`, { status })
 }
 
 export const optionsApi = {
