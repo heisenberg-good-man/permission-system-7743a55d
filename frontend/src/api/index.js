@@ -46,6 +46,7 @@ export const interviewsApi = {
 export const offersApi = {
   getOffers: (params) => api.get('/offers', { params }),
   getOffer: (id) => api.get(`/offers/${id}`),
+  getOfferDetails: (id) => api.get(`/offers/${id}/details`),
   createOffer: (data) => api.post('/offers', data),
   updateOffer: (id, data) => api.put(`/offers/${id}`, data),
   updateStatus: (id, status) => api.put(`/offers/${id}/status`, { status })

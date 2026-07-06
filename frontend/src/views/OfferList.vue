@@ -150,34 +150,58 @@ const loadOffers = async () => {
     if (filters.value.keyword) params.keyword = filters.value.keyword
     const res = await offersApi.getOffers(params)
     offers.value = res.data
-    
+
+    applications.value = {}
+    jobs.value = {}
+    candidates.value = {}
+
+    if (offers.value.length === 0) return
+
     const appIds = [...new Set(offers.value.map(o => o.application_id))]
-    const appPromises = appIds.map(id => applicationsApi.getApplication(id))
-    const appResults = await Promise.all(appPromises)
-    appResults.forEach(res => {
-      applications.value[res.data.id] = res.data
-    })
-    
-    const jobIds = [...new Set(appResults.map(r => r.data.job_id))]
-    const jobPromises = jobIds.map(id => jobsApi.getJob(id))
-    const jobResults = await Promise.all(jobPromises)
-    jobResults.forEach(res => {
-      jobs.value[res.data.id] = res.data.company
-    })
-    
-    const candidateIds = [...new Set(appResults.map(r => r.data.candidate_id))]
-    const candidatePromises = candidateIds.map(id => candidatesApi.getCandidate(id))
-    const candidateResults = await Promise.all(candidatePromises)
-    candidateResults.forEach(res => {
-      candidates.value[res.data.id] = res.data.name
-    })
-    
-    appIds.forEach(appId => {
-      const app = applications.value[appId]
-      if (app) {
-        jobs.value[appId] = jobs.value[app.job_id]
-        candidates.value[appId] = candidates.value[app.candidate_id]
+    const appSettled = await Promise.allSettled(
+      appIds.map(id => applicationsApi.getApplication(id))
+    )
+
+    const validApps = []
+    appSettled.forEach((result, idx) => {
+      if (result.status === 'fulfilled' && result.value?.data) {
+        const appData = result.value.data
+        applications.value[appData.id] = appData
+        validApps.push(appData)
+      } else {
+        console.warn(`Failed to load application ${appIds[idx]}:`, result.reason)
       }
+    })
+
+    if (validApps.length === 0) return
+
+    const jobIds = [...new Set(validApps.map(a => a.job_id))]
+    const jobSettled = await Promise.allSettled(
+      jobIds.map(id => jobsApi.getJob(id))
+    )
+    jobSettled.forEach((result, idx) => {
+      if (result.status === 'fulfilled' && result.value?.data) {
+        jobs.value[result.value.data.id] = result.value.data.company
+      } else {
+        console.warn(`Failed to load job ${jobIds[idx]}:`, result.reason)
+      }
+    })
+
+    const candidateIds = [...new Set(validApps.map(a => a.candidate_id))]
+    const candidateSettled = await Promise.allSettled(
+      candidateIds.map(id => candidatesApi.getCandidate(id))
+    )
+    candidateSettled.forEach((result, idx) => {
+      if (result.status === 'fulfilled' && result.value?.data) {
+        candidates.value[result.value.data.id] = result.value.data.name
+      } else {
+        console.warn(`Failed to load candidate ${candidateIds[idx]}:`, result.reason)
+      }
+    })
+
+    validApps.forEach(app => {
+      jobs.value[app.id] = jobs.value[app.job_id] || '未知公司'
+      candidates.value[app.id] = candidates.value[app.candidate_id] || '未知候选人'
     })
   } catch (error) {
     console.error('Failed to load offers:', error)

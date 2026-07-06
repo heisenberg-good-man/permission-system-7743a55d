@@ -802,6 +802,43 @@ def get_offer(offer_id: str):
     return offer
 
 
+@app.get("/api/offers/{offer_id}/details")
+def get_offer_details(offer_id: str):
+    offer = next((o for o in mock_offers if o["id"] == offer_id), None)
+    if not offer:
+        raise HTTPException(status_code=404, detail="Offer记录不存在")
+
+    result = {
+        "offer": offer,
+        "application": None,
+        "job": None,
+        "candidate": None,
+        "interviews": [],
+        "latest_interview": None
+    }
+
+    app_id = offer.get("application_id")
+    if app_id:
+        application = next((a for a in mock_applications if a["id"] == app_id), None)
+        if application:
+            result["application"] = application
+
+            job = next((j for j in mock_jobs if j["id"] == application["job_id"]), None)
+            if job:
+                result["job"] = job
+
+            candidate = next((c for c in mock_candidates if c["id"] == application["candidate_id"]), None)
+            if candidate:
+                result["candidate"] = candidate
+
+            interviews = [i for i in mock_interviews if i["application_id"] == app_id]
+            result["interviews"] = interviews
+            if interviews:
+                result["latest_interview"] = max(interviews, key=lambda x: x["time"])
+
+    return result
+
+
 @app.post("/api/offers", response_model=Offer)
 def create_offer(offer: dict):
     if not offer.get("application_id"):

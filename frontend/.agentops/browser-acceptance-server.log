@@ -149,3 +149,17 @@ Re-optimizing dependencies because vite config has changed
 [2m06:05:41[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/views/OfferDetail.vue[22m
 [2m06:06:28[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/views/OfferDetail.vue[22m
 [2m06:06:57[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/views/OfferDetail.vue[22m
+
+> recruitment-platform@1.0.0 dev
+> vite --host 127.0.0.1 --port 5173
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m783[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
+[2m06:24:28[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/views/OfferList.vue[22m
+[2m06:26:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/views/OfferDetail.vue[22m
+[2m06:27:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/views/OfferDetail.vue[22m
+[2m06:27:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/views/OfferDetail.vue[22m
+[2m06:27:57[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/views/OfferDetail.vue[22m

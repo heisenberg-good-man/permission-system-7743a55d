@@ -144,6 +144,13 @@
                   <div class="timeline-time">{{ formatDateTime(offer.created_at) }}</div>
                 </div>
               </div>
+              <div class="timeline-item" v-if="offer.status === 'pending' && offer.updated_at !== offer.created_at">
+                <div class="timeline-dot pending"></div>
+                <div class="timeline-content">
+                  <div class="timeline-title">Offer已发出</div>
+                  <div class="timeline-time">{{ formatDateTime(offer.updated_at) }}</div>
+                </div>
+              </div>
               <div class="timeline-item" v-if="offer.status === 'accepted'">
                 <div class="timeline-dot accepted"></div>
                 <div class="timeline-content">
@@ -200,8 +207,8 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
+import { ref, computed, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { offersApi, applicationsApi, jobsApi, candidatesApi, interviewsApi } from '../api'
 
 const route = useRoute()
@@ -286,7 +293,7 @@ const formatDateTime = (dateStr) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
-const clearAllData = () => {
+const resetAllState = () => {
   offer.value = null
   application.value = null
   job.value = null
@@ -307,33 +314,48 @@ const clearAllData = () => {
   }
 }
 
-const loadOfferDetail = async (offerId) => {
-  try {
-    const res = await offersApi.getOffer(offerId)
-    return res.data || null
-  } catch (e) {
-    throw e
+const applyOfferDetail = (data) => {
+  offer.value = data.offer
+  application.value = data.application
+  job.value = data.job
+  candidate.value = data.candidate
+  interviews.value = data.interviews || []
+  latestInterview.value = data.latest_interview
+  if (data.offer) {
+    formData.value = {
+      position_title: data.offer.position_title,
+      salary_min: data.offer.salary_min,
+      salary_max: data.offer.salary_max,
+      start_date: data.offer.start_date,
+      notes: data.offer.notes,
+      status: data.offer.status
+    }
   }
 }
 
 const loadApplicationData = async (appId) => {
   try {
     const appRes = await applicationsApi.getApplication(appId)
-    if (!appRes.data) {
-      return null
-    }
-    
+    if (!appRes.data) return null
+
     const [jobRes, candidateRes, interviewsRes] = await Promise.all([
       jobsApi.getJob(appRes.data.job_id),
       candidatesApi.getCandidate(appRes.data.candidate_id),
       interviewsApi.getInterviews({ application_id: appId })
     ])
-    
+
+    const interviews = interviewsRes.data || []
+    let latest = null
+    if (interviews.length > 0) {
+      latest = interviews.reduce((l, c) => new Date(c.time) > new Date(l.time) ? c : l)
+    }
+
     return {
       application: appRes.data,
       job: jobRes.data,
       candidate: candidateRes.data,
-      interviews: interviewsRes.data || []
+      interviews: interviews,
+      latest_interview: latest
     }
   } catch (e) {
     console.error('Failed to load application data:', e)
@@ -345,18 +367,14 @@ const loadData = async (targetId = null, targetQuery = null) => {
   const requestId = ++loadRequestId
   try {
     loading.value = true
-    error.value = null
-    notFound.value = false
-    relatedDataError.value = null
-    isEdit.value = false
-    clearAllData()
+    resetAllState()
 
     const currentId = targetId || route.params.id
     const query = targetQuery || route.query
+    const isCreate = currentId === 'create'
+    currentMode.value = isCreate ? 'create' : 'detail'
 
-    currentMode.value = currentId === 'create' ? 'create' : 'detail'
-
-    if (currentMode.value === 'create') {
+    if (isCreate) {
       const appId = query.application_id
       if (appId) {
         const appData = await loadApplicationData(appId)
@@ -366,15 +384,9 @@ const loadData = async (targetId = null, targetQuery = null) => {
           job.value = appData.job
           candidate.value = appData.candidate
           interviews.value = appData.interviews
-
-          if (appData.interviews.length > 0) {
-            latestInterview.value = appData.interviews.reduce((latest, current) => {
-              return new Date(current.time) > new Date(latest.time) ? current : latest
-            })
-          }
-
-          if (job.value) {
-            formData.value.position_title = job.value.title
+          latestInterview.value = appData.latest_interview
+          if (appData.job) {
+            formData.value.position_title = appData.job.title
           }
         } else {
           error.value = '关联投递记录不存在或无法获取'
@@ -383,43 +395,20 @@ const loadData = async (targetId = null, targetQuery = null) => {
         relatedDataError.value = '请从候选人详情、投递详情或面试详情进入创建 Offer，以确保关联正确的投递记录'
       }
     } else {
-      const offerData = await loadOfferDetail(currentId)
+      const detailRes = await offersApi.getOfferDetails(currentId)
       if (requestId !== loadRequestId) return
-      if (!offerData) {
+      const data = detailRes.data
+      if (!data?.offer) {
         notFound.value = true
         return
       }
 
-      offer.value = offerData
-      formData.value = {
-        position_title: offerData.position_title,
-        salary_min: offerData.salary_min,
-        salary_max: offerData.salary_max,
-        start_date: offerData.start_date,
-        notes: offerData.notes,
-        status: offerData.status
-      }
+      applyOfferDetail(data)
 
-      const appId = offerData.application_id
-      if (appId) {
-        const appData = await loadApplicationData(appId)
-        if (requestId !== loadRequestId) return
-        if (appData) {
-          application.value = appData.application
-          job.value = appData.job
-          candidate.value = appData.candidate
-          interviews.value = appData.interviews
-
-          if (appData.interviews.length > 0) {
-            latestInterview.value = appData.interviews.reduce((latest, current) => {
-              return new Date(current.time) > new Date(latest.time) ? current : latest
-            })
-          }
-        } else {
-          relatedDataError.value = '关联投递信息加载失败，请稍后重试或联系管理员'
-        }
-      } else {
+      if (!data.application) {
         relatedDataError.value = '该 Offer 未关联投递记录，无法显示候选人、职位等信息'
+      } else if (!data.job || !data.candidate) {
+        relatedDataError.value = '关联的职位或候选人信息加载失败，请稍后重试'
       }
     }
   } catch (errorResponse) {
@@ -472,7 +461,7 @@ const saveOffer = async () => {
       alert('入职时间必须在未来')
       return
     }
-    
+
     if (currentMode.value === 'create') {
       const res = await offersApi.createOffer({
         ...formData.value,
@@ -486,14 +475,34 @@ const saveOffer = async () => {
         return
       }
       alert('Offer创建成功')
-      await router.push(`/offers/${newId}`)
+
+      // 立即用详情接口拉取最新数据并展示，确保页面显示完整的新 Offer
+      let preloaded = false
+      try {
+        const detailRes = await offersApi.getOfferDetails(newId)
+        if (detailRes.data?.offer) {
+          currentMode.value = 'detail'
+          isEdit.value = false
+          applyOfferDetail(detailRes.data)
+          preloaded = true
+        }
+      } catch (e) {
+        console.warn('Preload offer detail failed, will retry after route change:', e)
+      }
+
+      // 切换路由到真实 Offer 地址
+      // - 预填成功时，watch 会检测到 newId === offer.value.id 跳过重复加载，避免闪烁
+      // - 预填失败时，watch 正常触发 loadData 重新加载
+      await router.replace({ path: `/offers/${newId}`, query: {} })
       await nextTick()
-      await loadData(newId)
+      if (!preloaded && route.params.id === newId) {
+        loadData(newId, {})
+      }
     } else {
       await offersApi.updateOffer(route.params.id, formData.value)
       alert('Offer信息更新成功')
       isEdit.value = false
-      await loadData()
+      loadData()
     }
   } catch (errorResponse) {
     console.error('Failed to save offer:', errorResponse)
@@ -505,9 +514,8 @@ const saveOffer = async () => {
 const updateStatus = async (status) => {
   try {
     await offersApi.updateStatus(route.params.id, status)
-    formData.value.status = status
     alert(`状态已更新为: ${getStatusText(status)}`)
-    await loadData()
+    loadData()
   } catch (errorResponse) {
     console.error('Failed to update status:', errorResponse)
     const errorMsg = errorResponse.response?.data?.detail || '更新失败，请重试'
@@ -521,25 +529,14 @@ const withdrawOffer = () => {
   }
 }
 
-onMounted(() => {
-  loadData()
-})
-
-onBeforeRouteUpdate((to, from) => {
-  if (to.params.id !== from.params.id || 
-      to.query.application_id !== from.query.application_id ||
-      to.query.interview_id !== from.query.interview_id) {
-    loadData(to.params.id, to.query)
-  }
-})
-
-watch(() => [route.params.id, route.query.application_id, route.query.interview_id], 
+watch(() => [route.params.id, route.query.application_id, route.query.interview_id],
   ([newId, newAppId, newInterviewId], [oldId, oldAppId, oldInterviewId]) => {
-    if (newId !== oldId || newAppId !== oldAppId || newInterviewId !== oldInterviewId) {
-      loadData(newId, route.query)
-    }
+    if (newId === oldId && newAppId === oldAppId && newInterviewId === oldInterviewId) return
+    // 保存创建后 router.replace 切到新 id，若该 id 已通过预填加载完成，跳过重复加载避免闪烁
+    if (newId !== 'create' && newId === offer.value?.id && !error.value && !notFound.value) return
+    loadData(newId, route.query)
   },
-  { immediate: false }
+  { immediate: true }
 )
 </script>
 
@@ -793,6 +790,9 @@ watch(() => [route.params.id, route.query.application_id, route.query.interview_
 }
 .timeline-dot.accepted {
   background: #4caf50;
+}
+.timeline-dot.pending {
+  background: #ff9800;
 }
 .timeline-dot.rejected {
   background: #d32f2f;
