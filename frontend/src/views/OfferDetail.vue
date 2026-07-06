@@ -200,7 +200,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { offersApi, applicationsApi, jobsApi, candidatesApi, interviewsApi } from '../api'
 
@@ -525,6 +525,12 @@ onMounted(() => {
 onBeforeRouteUpdate((to, from) => {
   if (to.params.id !== from.params.id || to.query.application_id !== from.query.application_id) {
     loadData(to.params.id, to.query)
+  }
+})
+
+watch(() => route.params.id, (newId, oldId) => {
+  if (newId !== oldId && newId !== undefined) {
+    loadData(newId, route.query)
   }
 })
 </script>
