@@ -52,7 +52,19 @@
       </div>
       <div class="right-panel">
         <div class="section-card chat-card">
-          <h3>沟通记录</h3>
+          <div class="chat-header">
+            <h3>沟通记录</h3>
+            <div class="sender-selector">
+              <button 
+                :class="['sender-btn', { active: currentSenderType === 'company' }]"
+                @click="currentSenderType = 'company'"
+              >招聘方</button>
+              <button 
+                :class="['sender-btn', { active: currentSenderType === 'candidate' }]"
+                @click="currentSenderType = 'candidate'"
+              >应聘方</button>
+            </div>
+          </div>
           <div class="messages-container" ref="messagesContainer">
             <div 
               v-for="message in messages" 
@@ -96,6 +108,7 @@ const candidate = ref(null)
 const messages = ref([])
 const newMessage = ref('')
 const messagesContainer = ref(null)
+const currentSenderType = ref('company')
 
 const statusOptions = [
   { value: 'pending', label: '待处理' },
@@ -130,13 +143,15 @@ const formatTime = (dateStr) => {
 
 const loadData = async () => {
   try {
-    const [appRes, jobRes, candidateRes, messagesRes] = await Promise.all([
-      applicationsApi.getApplication(route.params.id),
-      jobsApi.getJob(application.value?.job_id || ''),
-      candidatesApi.getCandidate(application.value?.candidate_id || ''),
+    const appRes = await applicationsApi.getApplication(route.params.id)
+    application.value = appRes.data
+    
+    const [jobRes, candidateRes, messagesRes] = await Promise.all([
+      jobsApi.getJob(application.value.job_id),
+      candidatesApi.getCandidate(application.value.candidate_id),
       messagesApi.getMessages({ application_id: route.params.id })
     ])
-    application.value = appRes.data
+    
     job.value = jobRes.data
     candidate.value = candidateRes.data
     messages.value = messagesRes.data
@@ -164,8 +179,8 @@ const sendMessage = async () => {
   try {
     const res = await messagesApi.createMessage({
       application_id: route.params.id,
-      sender_id: 'company-test',
-      sender_type: 'company',
+      sender_id: currentSenderType.value === 'company' ? 'company-test' : candidate.value.id,
+      sender_type: currentSenderType.value,
       content: content
     })
     messages.value.push(res.data)
@@ -312,6 +327,33 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 600px;
+}
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.sender-selector {
+  display: flex;
+  gap: 8px;
+}
+.sender-btn {
+  padding: 6px 14px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.sender-btn:hover {
+  border-color: #667eea;
+}
+.sender-btn.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
 }
 .messages-container {
   flex: 1;

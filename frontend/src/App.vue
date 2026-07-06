@@ -9,6 +9,7 @@
           <router-link to="/jobs/create" class="nav-link">发布职位</router-link>
           <router-link to="/jobs/manage" class="nav-link">管理职位</router-link>
           <router-link to="/applications" class="nav-link">投递记录</router-link>
+          <router-link to="/candidates" class="nav-link">候选人管理</router-link>
           <router-link to="/profile" class="nav-link">个人中心</router-link>
         </nav>
       </div>

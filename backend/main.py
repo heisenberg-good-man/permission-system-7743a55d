@@ -42,6 +42,9 @@ class Candidate(BaseModel):
     education: str
     experience: str
     resume: str
+    skills: List[str]
+    desired_job: str
+    desired_city: str
     status: str
     created_at: datetime
 
@@ -152,7 +155,10 @@ mock_candidates = [
         "phone": "13800138001",
         "education": "本科",
         "experience": "3年",
-        "resume": "张三的个人简历内容...\n\n工作经历：\n2023-至今 XX公司 前端工程师\n2021-2023 YY公司 前端开发\n\n技能：Vue, React, TypeScript, Node.js",
+        "resume": "张三的个人简历内容...\n\n工作经历：\n2023-至今 XX公司 前端工程师\n2021-2023 YY公司 前端开发\n\n技能：Vue, React, TypeScript, Node.js\n\n项目经验：\n1. 电商平台前端重构 - 负责核心页面开发\n2. 内部管理系统 - 独立完成前端架构设计",
+        "skills": ["Vue", "React", "TypeScript", "Node.js", "Webpack"],
+        "desired_job": "前端工程师",
+        "desired_city": "北京",
         "status": "active",
         "created_at": "2026-06-01T08:00:00"
     },
@@ -163,7 +169,10 @@ mock_candidates = [
         "phone": "13800138002",
         "education": "硕士",
         "experience": "4年",
-        "resume": "李四的个人简历内容...\n\n工作经历：\n2022-至今 XX公司 后端架构师\n2020-2022 YY公司 后端工程师\n\n技能：Python, Java, Redis, MySQL, Docker",
+        "resume": "李四的个人简历内容...\n\n工作经历：\n2022-至今 XX公司 后端架构师\n2020-2022 YY公司 后端工程师\n\n技能：Python, Java, Redis, MySQL, Docker\n\n项目经验：\n1. 微服务架构改造 - 主导技术选型\n2. 高并发系统优化 - 提升系统吞吐量300%",
+        "skills": ["Python", "Java", "Redis", "MySQL", "Docker", "Kubernetes"],
+        "desired_job": "后端开发工程师",
+        "desired_city": "杭州",
         "status": "active",
         "created_at": "2026-06-05T09:00:00"
     },
@@ -174,9 +183,40 @@ mock_candidates = [
         "phone": "13800138003",
         "education": "本科",
         "experience": "2年",
-        "resume": "王五的个人简历内容...\n\n工作经历：\n2024-至今 XX公司 产品助理\n2023-2024 YY公司 运营专员\n\n技能：产品设计, 用户调研, 数据分析",
+        "resume": "王五的个人简历内容...\n\n工作经历：\n2024-至今 XX公司 产品助理\n2023-2024 YY公司 运营专员\n\n技能：产品设计, 用户调研, 数据分析\n\n项目经验：\n1. 用户增长项目 - 负责需求调研和方案设计\n2. 功能迭代优化 - 提升用户留存率20%",
+        "skills": ["产品设计", "用户调研", "数据分析", "Axure", "Excel"],
+        "desired_job": "产品经理",
+        "desired_city": "深圳",
         "status": "active",
         "created_at": "2026-06-10T10:00:00"
+    },
+    {
+        "id": "candidate-004",
+        "name": "赵六",
+        "email": "zhaoliu@example.com",
+        "phone": "13800138004",
+        "education": "大专",
+        "experience": "1年",
+        "resume": "赵六的个人简历内容...\n\n工作经历：\n2025-至今 XX公司 UI设计师\n\n技能：Figma, Sketch, Illustrator, Photoshop\n\n项目经验：\n1. App界面设计 - 完成全套UI设计\n2. 品牌视觉升级 - 制定设计规范",
+        "skills": ["Figma", "Sketch", "UI设计", "用户体验", "插画"],
+        "desired_job": "UI设计师",
+        "desired_city": "上海",
+        "status": "active",
+        "created_at": "2026-06-15T11:00:00"
+    },
+    {
+        "id": "candidate-005",
+        "name": "钱七",
+        "email": "qianqi@example.com",
+        "phone": "13800138005",
+        "education": "本科",
+        "experience": "5年",
+        "resume": "钱七的个人简历内容...\n\n工作经历：\n2021-至今 XX公司 技术总监\n2019-2021 YY公司 技术经理\n\n技能：架构设计, 团队管理, Python, Go\n\n项目经验：\n1. 大型系统架构设计 - 支撑千万级用户\n2. 团队建设 - 带领20人技术团队",
+        "skills": ["Python", "Go", "架构设计", "团队管理", "微服务"],
+        "desired_job": "技术总监",
+        "desired_city": "北京",
+        "status": "inactive",
+        "created_at": "2026-05-20T09:00:00"
     }
 ]
 
@@ -344,8 +384,30 @@ def delete_job(job_id: str):
 
 
 @app.get("/api/candidates", response_model=List[Candidate])
-def get_candidates():
-    return mock_candidates
+def get_candidates(
+    desired_city: Optional[str] = None, 
+    experience: Optional[str] = None, 
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+    desired_job: Optional[str] = None
+):
+    result = mock_candidates.copy()
+    if desired_city:
+        result = [c for c in result if c["desired_city"] == desired_city]
+    if experience:
+        result = [c for c in result if experience in c["experience"]]
+    if status:
+        result = [c for c in result if c["status"] == status]
+    if keyword:
+        kw = keyword.lower()
+        result = [c for c in result if 
+                  kw in c["name"].lower() or 
+                  kw in c["email"].lower() or
+                  kw in c["desired_job"].lower() or
+                  any(kw in skill.lower() for skill in c["skills"])]
+    if desired_job:
+        result = [c for c in result if desired_job.lower() in c["desired_job"].lower()]
+    return result
 
 
 @app.get("/api/candidates/{candidate_id}", response_model=Candidate)
@@ -366,6 +428,9 @@ def create_candidate(candidate: dict):
         "education": candidate.get("education"),
         "experience": candidate.get("experience"),
         "resume": candidate.get("resume", ""),
+        "skills": candidate.get("skills", []),
+        "desired_job": candidate.get("desired_job", ""),
+        "desired_city": candidate.get("desired_city", ""),
         "status": "active",
         "created_at": datetime.now().isoformat()
     }

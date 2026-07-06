@@ -6,6 +6,8 @@ import JobCreate from '../views/JobCreate.vue'
 import JobManage from '../views/JobManage.vue'
 import Applications from '../views/Applications.vue'
 import ApplicationDetail from '../views/ApplicationDetail.vue'
+import CandidateList from '../views/CandidateList.vue'
+import CandidateDetail from '../views/CandidateDetail.vue'
 import Profile from '../views/Profile.vue'
 
 const routes = [
@@ -16,6 +18,8 @@ const routes = [
   { path: '/jobs/manage', name: 'JobManage', component: JobManage },
   { path: '/applications', name: 'Applications', component: Applications },
   { path: '/applications/:id', name: 'ApplicationDetail', component: ApplicationDetail },
+  { path: '/candidates', name: 'CandidateList', component: CandidateList },
+  { path: '/candidates/:id', name: 'CandidateDetail', component: CandidateDetail },
   { path: '/profile', name: 'Profile', component: Profile }
 ]
 
