@@ -195,7 +195,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { offersApi, applicationsApi, jobsApi, candidatesApi, interviewsApi } from '../api'
 
@@ -361,6 +361,8 @@ const loadData = async (targetId = null, targetQuery = null) => {
         } else {
           error.value = '关联投递记录不存在或无法获取'
         }
+      } else {
+        relatedDataError.value = '请从候选人详情、投递详情或面试详情进入创建 Offer，以确保关联正确的投递记录'
       }
     } else {
       const offerData = await loadOfferDetail(currentId)
@@ -503,21 +505,9 @@ onMounted(() => {
   loadData()
 })
 
-onBeforeRouteUpdate(async (to, from) => {
+onBeforeRouteUpdate((to, from) => {
   if (to.params.id !== from.params.id || to.query.application_id !== from.query.application_id) {
-    await loadData(to.params.id, to.query)
-  }
-})
-
-watch(() => route.params.id, async (newId, oldId) => {
-  if (newId !== oldId) {
-    await loadData(newId, route.query)
-  }
-})
-
-watch(() => route.query.application_id, async (newAppId, oldAppId) => {
-  if (newAppId !== oldAppId && currentMode.value === 'create') {
-    await loadData('create', route.query)
+    loadData(to.params.id, to.query)
   }
 })
 </script>
