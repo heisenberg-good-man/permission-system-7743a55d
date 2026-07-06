@@ -133,10 +133,11 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { interviewsApi, applicationsApi, jobsApi, candidatesApi } from '../api'
 
 const route = useRoute()
+const router = useRouter()
 const interview = ref(null)
 const application = ref(null)
 const job = ref(null)
@@ -235,12 +236,20 @@ const enterEditMode = () => {
 
 const saveInterview = async () => {
   try {
+    if (!route.query.application_id && isCreate.value) {
+      alert('请先选择投递记录')
+      return
+    }
     if (!formData.value.time) {
       alert('请选择面试时间')
       return
     }
     if (!formData.value.interviewer) {
-      alert('请输入面试官')
+      alert('请输入面试官姓名')
+      return
+    }
+    if (!formData.value.method) {
+      alert('请选择面试方式')
       return
     }
     
@@ -250,7 +259,7 @@ const saveInterview = async () => {
         application_id: route.query.application_id
       })
       alert('面试安排创建成功')
-      $router.push(`/interviews/${res.data.id}`)
+      router.push(`/interviews/${res.data.id}`)
     } else {
       await interviewsApi.updateInterview(route.params.id, formData.value)
       alert('面试信息更新成功')

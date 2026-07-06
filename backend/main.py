@@ -101,14 +101,21 @@ class Stats(BaseModel):
     active_jobs: int
     total_applications: int
     pending_applications: int
+    communicating_applications: int
     interviewing_applications: int
+    hired_applications: int
+    rejected_applications: int
     total_interviews: int
     scheduled_interviews: int
     completed_interviews: int
+    cancelled_interviews: int
+    pending_interviews: int
     total_offers: int
     pending_offers: int
     accepted_offers: int
     rejected_offers: int
+    withdrawn_offers: int
+    pending_onboarding_offers: int
 
 
 mock_jobs = [
@@ -442,27 +449,41 @@ def get_stats():
     active_jobs = sum(1 for job in mock_jobs if job["status"] == "active")
     total_applications = len(mock_applications)
     pending_applications = sum(1 for app in mock_applications if app["status"] == "pending")
+    communicating_applications = sum(1 for app in mock_applications if app["status"] == "communicating")
     interviewing_applications = sum(1 for app in mock_applications if app["status"] == "interviewing")
+    hired_applications = sum(1 for app in mock_applications if app["status"] == "hired")
+    rejected_applications = sum(1 for app in mock_applications if app["status"] == "rejected")
     total_interviews = len(mock_interviews)
     scheduled_interviews = sum(1 for i in mock_interviews if i["status"] == "scheduled")
     completed_interviews = sum(1 for i in mock_interviews if i["status"] == "completed")
+    cancelled_interviews = sum(1 for i in mock_interviews if i["status"] == "cancelled")
+    pending_interviews = sum(1 for i in mock_interviews if i["status"] == "pending")
     total_offers = len(mock_offers)
     pending_offers = sum(1 for o in mock_offers if o["status"] == "pending")
     accepted_offers = sum(1 for o in mock_offers if o["status"] == "accepted")
     rejected_offers = sum(1 for o in mock_offers if o["status"] == "rejected")
+    withdrawn_offers = sum(1 for o in mock_offers if o["status"] == "withdrawn")
+    pending_onboarding_offers = sum(1 for o in mock_offers if o["status"] == "pending_onboarding")
     return {
         "total_jobs": total_jobs,
         "active_jobs": active_jobs,
         "total_applications": total_applications,
         "pending_applications": pending_applications,
+        "communicating_applications": communicating_applications,
         "interviewing_applications": interviewing_applications,
+        "hired_applications": hired_applications,
+        "rejected_applications": rejected_applications,
         "total_interviews": total_interviews,
         "scheduled_interviews": scheduled_interviews,
         "completed_interviews": completed_interviews,
+        "cancelled_interviews": cancelled_interviews,
+        "pending_interviews": pending_interviews,
         "total_offers": total_offers,
         "pending_offers": pending_offers,
         "accepted_offers": accepted_offers,
-        "rejected_offers": rejected_offers
+        "rejected_offers": rejected_offers,
+        "withdrawn_offers": withdrawn_offers,
+        "pending_onboarding_offers": pending_onboarding_offers
     }
 
 
@@ -745,7 +766,7 @@ def update_interview_status(interview_id: str, data: dict):
 
 
 @app.get("/api/offers", response_model=List[Offer])
-def get_offers(status: Optional[str] = None, application_id: Optional[str] = None, candidate_id: Optional[str] = None, keyword: Optional[str] = None):
+def get_offers(status: Optional[str] = None, application_id: Optional[str] = None, candidate_id: Optional[str] = None, keyword: Optional[str] = None, job_id: Optional[str] = None):
     result = mock_offers.copy()
     if status:
         result = [o for o in result if o["status"] == status]
@@ -754,10 +775,22 @@ def get_offers(status: Optional[str] = None, application_id: Optional[str] = Non
     if candidate_id:
         candidate_apps = [app["id"] for app in mock_applications if app["candidate_id"] == candidate_id]
         result = [o for o in result if o["application_id"] in candidate_apps]
+    if job_id:
+        job_apps = [app["id"] for app in mock_applications if app["job_id"] == job_id]
+        result = [o for o in result if o["application_id"] in job_apps]
     if keyword:
         kw = keyword.lower()
-        result = [o for o in result if 
-                  kw in o["position_title"].lower()]
+        matched_ids = set()
+        for o in result:
+            app = next((a for a in mock_applications if a["id"] == o["application_id"]), None)
+            if app:
+                candidate = next((c for c in mock_candidates if c["id"] == app["candidate_id"]), None)
+                job = next((j for j in mock_jobs if j["id"] == app["job_id"]), None)
+                if (candidate and kw in candidate["name"].lower()) or \
+                   (job and kw in job["title"].lower()) or \
+                   kw in o["position_title"].lower():
+                    matched_ids.add(o["id"])
+        result = [o for o in result if o["id"] in matched_ids]
     return result
 
 

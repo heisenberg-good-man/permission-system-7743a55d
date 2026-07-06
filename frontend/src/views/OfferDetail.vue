@@ -61,6 +61,31 @@
               → 查看面试详情
             </div>
           </div>
+          <div class="section-card" v-if="latestInterview">
+            <h3>最近面试反馈</h3>
+            <div class="interview-summary">
+              <div class="summary-row">
+                <span class="summary-label">面试轮次</span>
+                <span class="summary-value">{{ latestInterview.round }}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">面试官</span>
+                <span class="summary-value">{{ latestInterview.interviewer }}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">面试时间</span>
+                <span class="summary-value">{{ formatDateTime(latestInterview.time) }}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">面试状态</span>
+                <span class="summary-value">{{ getInterviewStatusText(latestInterview.status) }}</span>
+              </div>
+              <div class="summary-notes">
+                <span class="summary-label">反馈摘要</span>
+                <p>{{ latestInterview.notes }}</p>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="right-panel">
           <div class="section-card">
@@ -141,14 +166,17 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { offersApi, applicationsApi, jobsApi, candidatesApi } from '../api'
+import { useRoute, useRouter } from 'vue-router'
+import { offersApi, applicationsApi, jobsApi, candidatesApi, interviewsApi } from '../api'
 
 const route = useRoute()
+const router = useRouter()
 const offer = ref(null)
 const application = ref(null)
 const job = ref(null)
 const candidate = ref(null)
+const interviews = ref([])
+const latestInterview = ref(null)
 const loading = ref(true)
 const isCreate = computed(() => route.params.id === 'create')
 const isEdit = ref(false)
@@ -191,6 +219,16 @@ const getAppStatusText = (status) => {
   return map[status] || status
 }
 
+const getInterviewStatusText = (status) => {
+  const map = {
+    'pending': '待安排',
+    'scheduled': '已安排',
+    'completed': '已完成',
+    'cancelled': '已取消'
+  }
+  return map[status] || status
+}
+
 const formatDateTime = (dateStr) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
@@ -215,14 +253,22 @@ const loadData = async () => {
     
     const appId = isCreate.value ? route.query.application_id : offer.value?.application_id
     if (appId) {
-      const [appRes, jobRes, candidateRes] = await Promise.all([
+      const [appRes, jobRes, candidateRes, interviewsRes] = await Promise.all([
         applicationsApi.getApplication(appId),
         jobsApi.getJob(appId ? (await applicationsApi.getApplication(appId)).data.job_id : ''),
-        candidatesApi.getCandidate(appId ? (await applicationsApi.getApplication(appId)).data.candidate_id : '')
+        candidatesApi.getCandidate(appId ? (await applicationsApi.getApplication(appId)).data.candidate_id : ''),
+        interviewsApi.getInterviews({ application_id: appId })
       ])
       application.value = appRes.data
       job.value = jobRes.data
       candidate.value = candidateRes.data
+      interviews.value = interviewsRes.data
+      
+      if (interviews.value.length > 0) {
+        latestInterview.value = interviews.value.reduce((latest, current) => {
+          return new Date(current.time) > new Date(latest.time) ? current : latest
+        })
+      }
       
       if (isCreate.value && job.value) {
         formData.value.position_title = job.value.title
@@ -241,12 +287,20 @@ const enterEditMode = () => {
 
 const saveOffer = async () => {
   try {
+    if (!route.query.application_id && isCreate.value) {
+      alert('请先选择投递记录')
+      return
+    }
     if (!formData.value.position_title) {
       alert('请输入职位名称')
       return
     }
     if (!formData.value.salary_min || !formData.value.salary_max) {
-      alert('请输入薪资范围')
+      alert('请输入薪资范围（最低和最高）')
+      return
+    }
+    if (Number(formData.value.salary_min) <= 0 || Number(formData.value.salary_max) <= 0) {
+      alert('薪资范围必须为正数')
       return
     }
     if (Number(formData.value.salary_min) >= Number(formData.value.salary_max)) {
@@ -257,6 +311,11 @@ const saveOffer = async () => {
       alert('请选择入职时间')
       return
     }
+    const startDate = new Date(formData.value.start_date)
+    if (startDate <= new Date()) {
+      alert('入职时间必须在未来')
+      return
+    }
     
     if (isCreate.value) {
       const res = await offersApi.createOffer({
@@ -265,7 +324,7 @@ const saveOffer = async () => {
         interview_id: route.query.interview_id
       })
       alert('Offer创建成功')
-      $router.push(`/offers/${res.data.id}`)
+      router.push(`/offers/${res.data.id}`)
     } else {
       await offersApi.updateOffer(route.params.id, formData.value)
       alert('Offer信息更新成功')
@@ -438,6 +497,42 @@ onMounted(() => {
   color: #667eea;
   cursor: pointer;
   font-size: 14px;
+}
+.interview-summary {
+  padding-top: 8px;
+}
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.summary-row:last-of-type {
+  border-bottom: none;
+}
+.summary-label {
+  font-size: 13px;
+  color: #999;
+}
+.summary-value {
+  font-size: 14px;
+  font-weight: 500;
+}
+.summary-notes {
+  margin-top: 12px;
+}
+.summary-notes .summary-label {
+  display: block;
+  margin-bottom: 8px;
+}
+.summary-notes p {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.6;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  margin: 0;
 }
 .status-badge {
   font-size: 12px;

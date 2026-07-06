@@ -21,6 +21,14 @@
         <div class="stat-value rejected">{{ stats.rejected || 0 }}</div>
         <div class="stat-label">已拒绝</div>
       </div>
+      <div class="stat-item">
+        <div class="stat-value withdrawn">{{ stats.withdrawn || 0 }}</div>
+        <div class="stat-label">已撤回</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value pending_onboarding">{{ stats.pending_onboarding || 0 }}</div>
+        <div class="stat-label">待入职</div>
+      </div>
     </div>
     <div class="filters">
       <div class="filter-item">
@@ -35,8 +43,15 @@
         </select>
       </div>
       <div class="filter-item">
-        <label>职位搜索</label>
-        <input type="text" v-model="filters.keyword" placeholder="搜索职位名称" @keyup.enter="loadOffers" />
+        <label>职位</label>
+        <select v-model="filters.job_id" @change="loadOffers">
+          <option value="">全部职位</option>
+          <option v-for="job in jobOptions" :key="job.id" :value="job.id">{{ job.title }}</option>
+        </select>
+      </div>
+      <div class="filter-item">
+        <label>搜索</label>
+        <input type="text" v-model="filters.keyword" placeholder="搜索候选人姓名或职位" @keyup.enter="loadOffers" />
       </div>
       <button class="btn-search" @click="loadOffers">🔍 搜索</button>
       <button class="btn-reset" @click="resetFilters">重置</button>
@@ -84,8 +99,10 @@ const offers = ref([])
 const applications = ref({})
 const jobs = ref({})
 const candidates = ref({})
+const jobOptions = ref([])
 const filters = ref({
   status: '',
+  job_id: '',
   keyword: ''
 })
 
@@ -94,7 +111,9 @@ const stats = computed(() => {
     total: offers.value.length,
     pending: offers.value.filter(o => o.status === 'pending').length,
     accepted: offers.value.filter(o => o.status === 'accepted').length,
-    rejected: offers.value.filter(o => o.status === 'rejected').length
+    rejected: offers.value.filter(o => o.status === 'rejected').length,
+    withdrawn: offers.value.filter(o => o.status === 'withdrawn').length,
+    pending_onboarding: offers.value.filter(o => o.status === 'pending_onboarding').length
   }
 })
 
@@ -127,6 +146,7 @@ const loadOffers = async () => {
   try {
     const params = {}
     if (filters.value.status) params.status = filters.value.status
+    if (filters.value.job_id) params.job_id = filters.value.job_id
     if (filters.value.keyword) params.keyword = filters.value.keyword
     const res = await offersApi.getOffers(params)
     offers.value = res.data
@@ -164,12 +184,22 @@ const loadOffers = async () => {
   }
 }
 
+const loadJobOptions = async () => {
+  try {
+    const res = await jobsApi.getJobs()
+    jobOptions.value = res.data
+  } catch (error) {
+    console.error('Failed to load jobs:', error)
+  }
+}
+
 const resetFilters = () => {
-  filters.value = { status: '', keyword: '' }
+  filters.value = { status: '', job_id: '', keyword: '' }
   loadOffers()
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await loadJobOptions()
   loadOffers()
 })
 </script>
@@ -191,7 +221,7 @@ onMounted(() => {
 }
 .stats-bar {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -214,6 +244,12 @@ onMounted(() => {
 }
 .stat-value.rejected {
   color: #d32f2f;
+}
+.stat-value.withdrawn {
+  color: #999;
+}
+.stat-value.pending_onboarding {
+  color: #9c27b0;
 }
 .stat-label {
   font-size: 14px;

@@ -97,7 +97,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { jobsApi, optionsApi } from '../api'
+
+const router = useRouter()
 
 const jobForm = ref({
   title: '',
@@ -145,7 +148,7 @@ const submitJob = async () => {
   try {
     await jobsApi.createJob(jobForm.value)
     alert('职位发布成功！')
-    $router.push('/jobs/manage')
+    router.push('/jobs/manage')
   } catch (error) {
     console.error('Failed to create job:', error)
     alert('发布失败，请重试')
