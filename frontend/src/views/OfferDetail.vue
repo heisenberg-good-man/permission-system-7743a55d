@@ -19,6 +19,7 @@
         <div class="error-actions">
           <button class="btn-retry" @click="loadData()">重新加载</button>
           <button class="btn-back-home" @click="router.push('/offers')">返回Offer列表</button>
+          <button v-if="currentMode === 'create'" class="btn-back-home" @click="router.push('/applications')">去投递列表</button>
         </div>
       </div>
       <div v-else>
