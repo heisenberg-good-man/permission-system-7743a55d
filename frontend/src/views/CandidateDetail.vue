@@ -89,6 +89,26 @@
             <div class="empty-text">暂无面试记录</div>
           </div>
         </div>
+        <div class="card">
+          <h2>📋 Offer记录</h2>
+          <div class="offers-list" v-if="offers.length > 0">
+            <div v-for="offer in offers" :key="offer.id" class="offer-item" @click="$router.push(`/offers/${offer.id}`)">
+              <div class="offer-header">
+                <span class="offer-title">{{ offer.position_title }}</span>
+                <span class="offer-status" :class="offer.status">{{ getOfferStatusText(offer.status) }}</span>
+              </div>
+              <div class="offer-meta">
+                <span>💰 {{ offer.salary_min }}K-{{ offer.salary_max }}K</span>
+                <span>📅 {{ formatDate(offer.start_date) }}</span>
+              </div>
+              <div class="offer-arrow">→</div>
+            </div>
+          </div>
+          <div class="empty-offers" v-else>
+            <div class="empty-icon">📋</div>
+            <div class="empty-text">暂无Offer记录</div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="loading" v-if="loading">
@@ -101,13 +121,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { candidatesApi, applicationsApi, jobsApi, interviewsApi } from '../api'
+import { candidatesApi, applicationsApi, jobsApi, interviewsApi, offersApi } from '../api'
 
 const route = useRoute()
 const candidate = ref(null)
 const applications = ref([])
 const jobs = ref({})
 const interviews = ref([])
+const offers = ref([])
 const loading = ref(true)
 
 const getJobTitle = (jobId) => {
@@ -131,6 +152,17 @@ const getInterviewStatusText = (status) => {
     'scheduled': '已安排',
     'completed': '已完成',
     'cancelled': '已取消'
+  }
+  return map[status] || status
+}
+
+const getOfferStatusText = (status) => {
+  const map = {
+    'pending': '待确认',
+    'accepted': '已接受',
+    'rejected': '已拒绝',
+    'withdrawn': '已撤回',
+    'pending_onboarding': '待入职'
   }
   return map[status] || status
 }
@@ -159,14 +191,16 @@ const formatDateTime = (dateStr) => {
 const loadData = async () => {
   try {
     loading.value = true
-    const [candidateRes, appsRes, interviewsRes] = await Promise.all([
+    const [candidateRes, appsRes, interviewsRes, offersRes] = await Promise.all([
       candidatesApi.getCandidate(route.params.id),
       applicationsApi.getApplications({ candidate_id: route.params.id }),
-      interviewsApi.getInterviews({ candidate_id: route.params.id })
+      interviewsApi.getInterviews({ candidate_id: route.params.id }),
+      offersApi.getOffers({ candidate_id: route.params.id })
     ])
     candidate.value = candidateRes.data
     applications.value = appsRes.data
     interviews.value = interviewsRes.data
+    offers.value = offersRes.data
     
     const jobIds = [...new Set(applications.value.map(a => a.job_id))]
     const jobPromises = jobIds.map(id => jobsApi.getJob(id))
@@ -429,6 +463,74 @@ onMounted(() => {
   margin-left: 12px;
 }
 .empty-interviews {
+  text-align: center;
+  padding: 40px 20px;
+}
+.offers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.offer-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.offer-item:hover {
+  background: #fff8e1;
+}
+.offer-header {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.offer-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.offer-status {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+.offer-status.pending {
+  background: #fff3e0;
+  color: #ff9800;
+}
+.offer-status.accepted {
+  background: #e8f5e9;
+  color: #4caf50;
+}
+.offer-status.rejected {
+  background: #ffebee;
+  color: #d32f2f;
+}
+.offer-status.withdrawn {
+  background: #f5f5f5;
+  color: #999;
+}
+.offer-status.pending_onboarding {
+  background: #f3e5f5;
+  color: #9c27b0;
+}
+.offer-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #666;
+}
+.offer-arrow {
+  font-size: 20px;
+  color: #ccc;
+  margin-left: 12px;
+}
+.empty-offers {
   text-align: center;
   padding: 40px 20px;
 }

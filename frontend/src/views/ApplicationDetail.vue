@@ -58,6 +58,9 @@
           <button class="btn-interview" @click="$router.push(`/interviews/create?application_id=${route.params.id}`)">
             📅 安排面试
           </button>
+          <button class="btn-offer" @click="$router.push(`/offers/create?application_id=${route.params.id}`)">
+            📋 发放Offer
+          </button>
         </div>
       </div>
       <div class="right-panel">
@@ -457,9 +460,24 @@ onMounted(() => {
   font-size: 14px;
   width: 100%;
   transition: background 0.2s;
+  margin-bottom: 10px;
 }
 .btn-interview:hover {
   background: #45a049;
+}
+.btn-offer {
+  padding: 12px 24px;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  width: 100%;
+  transition: background 0.2s;
+}
+.btn-offer:hover {
+  background: #f57c00;
 }
 .loading {
   text-align: center;

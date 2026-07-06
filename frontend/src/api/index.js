@@ -43,6 +43,14 @@ export const interviewsApi = {
   updateStatus: (id, status) => api.put(`/interviews/${id}/status`, { status })
 }
 
+export const offersApi = {
+  getOffers: (params) => api.get('/offers', { params }),
+  getOffer: (id) => api.get(`/offers/${id}`),
+  createOffer: (data) => api.post('/offers', data),
+  updateOffer: (id, data) => api.put(`/offers/${id}`, data),
+  updateStatus: (id, status) => api.put(`/offers/${id}/status`, { status })
+}
+
 export const optionsApi = {
   getCities: () => api.get('/cities'),
   getStatuses: () => api.get('/statuses')

@@ -82,6 +82,20 @@ class Interview(BaseModel):
     updated_at: datetime
 
 
+class Offer(BaseModel):
+    id: str
+    application_id: str
+    interview_id: Optional[str]
+    salary_min: int
+    salary_max: int
+    position_title: str
+    start_date: datetime
+    notes: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class Stats(BaseModel):
     total_jobs: int
     active_jobs: int
@@ -91,6 +105,10 @@ class Stats(BaseModel):
     total_interviews: int
     scheduled_interviews: int
     completed_interviews: int
+    total_offers: int
+    pending_offers: int
+    accepted_offers: int
+    rejected_offers: int
 
 
 mock_jobs = [
@@ -375,6 +393,48 @@ mock_interviews = [
     }
 ]
 
+mock_offers = [
+    {
+        "id": "offer-001",
+        "application_id": "app-001",
+        "interview_id": "interview-002",
+        "salary_min": 35000,
+        "salary_max": 45000,
+        "position_title": "高级前端工程师",
+        "start_date": "2026-07-20T09:00:00",
+        "notes": "13薪，年终奖视公司效益而定，入职后享有完善的培训体系",
+        "status": "pending",
+        "created_at": "2026-07-06T14:00:00",
+        "updated_at": "2026-07-06T14:00:00"
+    },
+    {
+        "id": "offer-002",
+        "application_id": "app-003",
+        "interview_id": None,
+        "salary_min": 25000,
+        "salary_max": 32000,
+        "position_title": "产品经理",
+        "start_date": "2026-07-15T09:00:00",
+        "notes": "14薪，五险一金齐全，提供年度体检",
+        "status": "accepted",
+        "created_at": "2026-07-05T10:00:00",
+        "updated_at": "2026-07-07T16:00:00"
+    },
+    {
+        "id": "offer-003",
+        "application_id": "app-004",
+        "interview_id": None,
+        "salary_min": 20000,
+        "salary_max": 28000,
+        "position_title": "UI设计师",
+        "start_date": "2026-07-18T09:00:00",
+        "notes": "13薪，弹性工作制",
+        "status": "rejected",
+        "created_at": "2026-07-04T11:00:00",
+        "updated_at": "2026-07-06T09:00:00"
+    }
+]
+
 
 @app.get("/api/stats", response_model=Stats)
 def get_stats():
@@ -386,6 +446,10 @@ def get_stats():
     total_interviews = len(mock_interviews)
     scheduled_interviews = sum(1 for i in mock_interviews if i["status"] == "scheduled")
     completed_interviews = sum(1 for i in mock_interviews if i["status"] == "completed")
+    total_offers = len(mock_offers)
+    pending_offers = sum(1 for o in mock_offers if o["status"] == "pending")
+    accepted_offers = sum(1 for o in mock_offers if o["status"] == "accepted")
+    rejected_offers = sum(1 for o in mock_offers if o["status"] == "rejected")
     return {
         "total_jobs": total_jobs,
         "active_jobs": active_jobs,
@@ -394,7 +458,11 @@ def get_stats():
         "interviewing_applications": interviewing_applications,
         "total_interviews": total_interviews,
         "scheduled_interviews": scheduled_interviews,
-        "completed_interviews": completed_interviews
+        "completed_interviews": completed_interviews,
+        "total_offers": total_offers,
+        "pending_offers": pending_offers,
+        "accepted_offers": accepted_offers,
+        "rejected_offers": rejected_offers
     }
 
 
@@ -625,16 +693,24 @@ def get_interview(interview_id: str):
 
 @app.post("/api/interviews", response_model=Interview)
 def create_interview(interview: dict):
+    if not interview.get("application_id"):
+        raise HTTPException(status_code=400, detail="请选择投递记录（application_id不能为空）")
     application = next((app for app in mock_applications if app["id"] == interview["application_id"]), None)
     if not application:
         raise HTTPException(status_code=400, detail="投递记录不存在")
+    if not interview.get("time"):
+        raise HTTPException(status_code=400, detail="请选择面试时间（time不能为空）")
+    if not interview.get("method"):
+        raise HTTPException(status_code=400, detail="请选择面试方式（method不能为空）")
+    if not interview.get("interviewer"):
+        raise HTTPException(status_code=400, detail="请输入面试官姓名（interviewer不能为空）")
     new_interview = {
         "id": f"interview-{len(mock_interviews) + 1:03d}",
-        "application_id": interview.get("application_id"),
-        "interviewer": interview.get("interviewer", ""),
+        "application_id": interview["application_id"],
+        "interviewer": interview["interviewer"],
         "round": interview.get("round", "初试"),
-        "method": interview.get("method", "视频面试"),
-        "time": interview.get("time"),
+        "method": interview["method"],
+        "time": interview["time"],
         "location": interview.get("location", ""),
         "status": interview.get("status", "pending"),
         "notes": interview.get("notes", ""),
@@ -666,6 +742,106 @@ def update_interview_status(interview_id: str, data: dict):
     mock_interviews[index]["status"] = new_status
     mock_interviews[index]["updated_at"] = datetime.now().isoformat()
     return mock_interviews[index]
+
+
+@app.get("/api/offers", response_model=List[Offer])
+def get_offers(status: Optional[str] = None, application_id: Optional[str] = None, candidate_id: Optional[str] = None, keyword: Optional[str] = None):
+    result = mock_offers.copy()
+    if status:
+        result = [o for o in result if o["status"] == status]
+    if application_id:
+        result = [o for o in result if o["application_id"] == application_id]
+    if candidate_id:
+        candidate_apps = [app["id"] for app in mock_applications if app["candidate_id"] == candidate_id]
+        result = [o for o in result if o["application_id"] in candidate_apps]
+    if keyword:
+        kw = keyword.lower()
+        result = [o for o in result if 
+                  kw in o["position_title"].lower()]
+    return result
+
+
+@app.get("/api/offers/{offer_id}", response_model=Offer)
+def get_offer(offer_id: str):
+    offer = next((o for o in mock_offers if o["id"] == offer_id), None)
+    if not offer:
+        raise HTTPException(status_code=404, detail="Offer记录不存在")
+    return offer
+
+
+@app.post("/api/offers", response_model=Offer)
+def create_offer(offer: dict):
+    if not offer.get("application_id"):
+        raise HTTPException(status_code=400, detail="请选择投递记录（application_id不能为空）")
+    application = next((app for app in mock_applications if app["id"] == offer["application_id"]), None)
+    if not application:
+        raise HTTPException(status_code=400, detail="投递记录不存在")
+    if not offer.get("salary_min") or not offer.get("salary_max"):
+        raise HTTPException(status_code=400, detail="请输入薪资范围（salary_min和salary_max不能为空）")
+    if offer.get("salary_min") >= offer.get("salary_max"):
+        raise HTTPException(status_code=400, detail="薪资下限不能大于等于上限")
+    if not offer.get("position_title"):
+        raise HTTPException(status_code=400, detail="请输入职位名称（position_title不能为空）")
+    if not offer.get("start_date"):
+        raise HTTPException(status_code=400, detail="请选择入职时间（start_date不能为空）")
+    
+    new_offer = {
+        "id": f"offer-{len(mock_offers) + 1:03d}",
+        "application_id": offer["application_id"],
+        "interview_id": offer.get("interview_id"),
+        "salary_min": offer["salary_min"],
+        "salary_max": offer["salary_max"],
+        "position_title": offer["position_title"],
+        "start_date": offer["start_date"],
+        "notes": offer.get("notes", ""),
+        "status": "pending",
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat()
+    }
+    mock_offers.append(new_offer)
+    return new_offer
+
+
+@app.put("/api/offers/{offer_id}", response_model=Offer)
+def update_offer(offer_id: str, data: dict):
+    index = next((i for i, offer in enumerate(mock_offers) if offer["id"] == offer_id), None)
+    if index is None:
+        raise HTTPException(status_code=404, detail="Offer记录不存在")
+    
+    if "salary_min" in data and "salary_max" in data:
+        if data["salary_min"] >= data["salary_max"]:
+            raise HTTPException(status_code=400, detail="薪资下限不能大于等于上限")
+    
+    mock_offers[index].update(data)
+    mock_offers[index]["updated_at"] = datetime.now().isoformat()
+    return mock_offers[index]
+
+
+@app.put("/api/offers/{offer_id}/status", response_model=Offer)
+def update_offer_status(offer_id: str, data: dict):
+    index = next((i for i, offer in enumerate(mock_offers) if offer["id"] == offer_id), None)
+    if index is None:
+        raise HTTPException(status_code=404, detail="Offer记录不存在")
+    
+    new_status = data.get("status")
+    valid_statuses = ["pending", "accepted", "rejected", "withdrawn", "pending_onboarding"]
+    if new_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"无效的状态值，可选值：{', '.join(valid_statuses)}")
+    
+    mock_offers[index]["status"] = new_status
+    mock_offers[index]["updated_at"] = datetime.now().isoformat()
+    
+    app_id = mock_offers[index]["application_id"]
+    app_index = next((i for i, app in enumerate(mock_applications) if app["id"] == app_id), None)
+    if app_index is not None:
+        if new_status == "accepted":
+            mock_applications[app_index]["status"] = "hired"
+        elif new_status == "rejected":
+            mock_applications[app_index]["status"] = "rejected"
+        elif new_status == "pending_onboarding":
+            mock_applications[app_index]["status"] = "hired"
+    
+    return mock_offers[index]
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 <template>
-  <div class="interview-detail-page">
+  <div class="offer-detail-page">
     <button class="btn-back" @click="$router.back()">← 返回列表</button>
     <div class="loading" v-if="loading">
       <div class="spinner"></div>
@@ -7,44 +7,33 @@
     </div>
     <div v-if="!loading">
       <div class="page-header">
-        <h1>{{ isEdit ? '编辑面试' : (isCreate ? '安排面试' : '面试详情') }}</h1>
+        <h1>{{ isEdit ? '编辑Offer' : (isCreate ? '创建Offer' : 'Offer详情') }}</h1>
         <p>{{ job?.title }} - {{ candidate?.name }}</p>
       </div>
-      <div class="detail-container" v-if="interview || isCreate">
+      <div class="detail-container" v-if="offer || isCreate">
         <div class="left-panel">
           <div class="section-card">
-            <h3>面试信息</h3>
+            <h3>Offer信息</h3>
             <div class="form-group">
-              <label>面试轮次</label>
-              <select v-model="formData.round" :disabled="!isEdit && !isCreate">
-                <option value="初试">初试</option>
-                <option value="复试">复试</option>
-                <option value="终试">终试</option>
-              </select>
+              <label>职位名称</label>
+              <input type="text" v-model="formData.position_title" :disabled="!isEdit && !isCreate" placeholder="请输入职位名称" />
             </div>
             <div class="form-group">
-              <label>面试方式</label>
-              <select v-model="formData.method" :disabled="!isEdit && !isCreate">
-                <option value="视频面试">视频面试</option>
-                <option value="现场面试">现场面试</option>
-                <option value="电话面试">电话面试</option>
-              </select>
+              <label>薪资范围（K）</label>
+              <div class="salary-input">
+                <input type="number" v-model="formData.salary_min" :disabled="!isEdit && !isCreate" placeholder="最低" />
+                <span class="salary-separator">-</span>
+                <input type="number" v-model="formData.salary_max" :disabled="!isEdit && !isCreate" placeholder="最高" />
+                <span class="salary-unit">K</span>
+              </div>
             </div>
             <div class="form-group">
-              <label>面试时间</label>
-              <input type="datetime-local" v-model="formData.time" :disabled="!isEdit && !isCreate" />
-            </div>
-            <div class="form-group">
-              <label>面试地点/会议链接</label>
-              <textarea v-model="formData.location" rows="2" :disabled="!isEdit && !isCreate" placeholder="请输入面试地点或视频会议链接"></textarea>
-            </div>
-            <div class="form-group">
-              <label>面试官</label>
-              <input type="text" v-model="formData.interviewer" :disabled="!isEdit && !isCreate" placeholder="请输入面试官姓名" />
+              <label>入职时间</label>
+              <input type="datetime-local" v-model="formData.start_date" :disabled="!isEdit && !isCreate" />
             </div>
             <div class="form-group">
               <label>备注</label>
-              <textarea v-model="formData.notes" rows="4" :disabled="!isEdit && !isCreate" placeholder="请输入面试备注"></textarea>
+              <textarea v-model="formData.notes" rows="4" :disabled="!isEdit && !isCreate" placeholder="请输入Offer备注，如福利、奖金等信息"></textarea>
             </div>
           </div>
           <div class="section-card">
@@ -68,12 +57,15 @@
             <div class="action-link" @click="$router.push(`/applications/${application?.id}`)">
               → 查看投递详情
             </div>
+            <div class="action-link" v-if="offer?.interview_id" @click="$router.push(`/interviews/${offer.interview_id}`)">
+              → 查看面试详情
+            </div>
           </div>
         </div>
         <div class="right-panel">
           <div class="section-card">
             <div class="section-header">
-              <h3>面试状态</h3>
+              <h3>Offer状态</h3>
               <span class="status-badge" :class="formData.status">{{ getStatusText(formData.status) }}</span>
             </div>
             <div class="status-selector" v-if="!isCreate">
@@ -86,43 +78,59 @@
                 {{ status.label }}
               </button>
             </div>
-            <div class="status-selector" v-if="isCreate">
-              <button 
-                v-for="status in createStatusOptions" 
-                :key="status.value"
-                :class="['status-btn', { active: formData.status === status.value }]"
-                @click="formData.status = status.value"
-              >
-                {{ status.label }}
-              </button>
+          </div>
+          <div class="section-card">
+            <h3>状态时间线</h3>
+            <div class="timeline">
+              <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div class="timeline-content">
+                  <div class="timeline-title">创建Offer</div>
+                  <div class="timeline-time">{{ formatDateTime(offer?.created_at) }}</div>
+                </div>
+              </div>
+              <div class="timeline-item" v-if="offer?.status === 'accepted'">
+                <div class="timeline-dot accepted"></div>
+                <div class="timeline-content">
+                  <div class="timeline-title">候选人已接受</div>
+                  <div class="timeline-time">{{ formatDateTime(offer?.updated_at) }}</div>
+                </div>
+              </div>
+              <div class="timeline-item" v-if="offer?.status === 'rejected'">
+                <div class="timeline-dot rejected"></div>
+                <div class="timeline-content">
+                  <div class="timeline-title">候选人已拒绝</div>
+                  <div class="timeline-time">{{ formatDateTime(offer?.updated_at) }}</div>
+                </div>
+              </div>
+              <div class="timeline-item" v-if="offer?.status === 'withdrawn'">
+                <div class="timeline-dot withdrawn"></div>
+                <div class="timeline-content">
+                  <div class="timeline-title">Offer已撤回</div>
+                  <div class="timeline-time">{{ formatDateTime(offer?.updated_at) }}</div>
+                </div>
+              </div>
+              <div class="timeline-item" v-if="offer?.status === 'pending_onboarding'">
+                <div class="timeline-dot pending_onboarding"></div>
+                <div class="timeline-content">
+                  <div class="timeline-title">待入职</div>
+                  <div class="timeline-time">{{ formatDateTime(offer?.updated_at) }}</div>
+                </div>
+              </div>
             </div>
           </div>
           <div class="section-card">
             <h3>操作</h3>
             <div class="action-buttons">
-              <button v-if="!isCreate && !isEdit" class="btn-offer" @click="$router.push(`/offers/create?application_id=${application?.id}&interview_id=${route.params.id}`)">
-                📋 发放Offer
-              </button>
-              <button v-if="isEdit || isCreate" class="btn-save" @click="saveInterview">
-                {{ isCreate ? '创建面试' : '保存修改' }}
+              <button v-if="isEdit || isCreate" class="btn-save" @click="saveOffer">
+                {{ isCreate ? '创建Offer' : '保存修改' }}
               </button>
               <button v-if="!isCreate && !isEdit" class="btn-edit" @click="enterEditMode">
-                编辑面试
+                编辑Offer
               </button>
-              <button v-if="!isCreate" class="btn-cancel" @click="cancelInterview" v-show="formData.status !== 'cancelled'">
-                取消面试
+              <button v-if="!isCreate && formData.status !== 'withdrawn'" class="btn-withdraw" @click="withdrawOffer">
+                撤回Offer
               </button>
-            </div>
-          </div>
-          <div class="section-card" v-if="!isCreate">
-            <h3>时间信息</h3>
-            <div class="info-row">
-              <span class="label">创建时间</span>
-              <span class="value">{{ formatDateTime(interview?.created_at) }}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">更新时间</span>
-              <span class="value">{{ formatDateTime(interview?.updated_at) }}</span>
             </div>
           </div>
         </div>
@@ -132,12 +140,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { interviewsApi, applicationsApi, jobsApi, candidatesApi } from '../api'
+import { offersApi, applicationsApi, jobsApi, candidatesApi } from '../api'
 
 const route = useRoute()
-const interview = ref(null)
+const offer = ref(null)
 const application = ref(null)
 const job = ref(null)
 const candidate = ref(null)
@@ -146,33 +154,28 @@ const isCreate = computed(() => route.params.id === 'create')
 const isEdit = ref(false)
 
 const formData = ref({
-  interviewer: '',
-  round: '初试',
-  method: '视频面试',
-  time: '',
-  location: '',
-  status: 'pending',
-  notes: ''
+  position_title: '',
+  salary_min: '',
+  salary_max: '',
+  start_date: '',
+  notes: '',
+  status: 'pending'
 })
 
 const statusOptions = [
-  { value: 'pending', label: '待安排' },
-  { value: 'scheduled', label: '已安排' },
-  { value: 'completed', label: '已完成' },
-  { value: 'cancelled', label: '已取消' }
-]
-
-const createStatusOptions = [
-  { value: 'pending', label: '待安排' },
-  { value: 'scheduled', label: '已安排' }
+  { value: 'pending', label: '待确认' },
+  { value: 'accepted', label: '候选人接受' },
+  { value: 'rejected', label: '候选人拒绝' },
+  { value: 'pending_onboarding', label: '待入职' }
 ]
 
 const getStatusText = (status) => {
   const map = {
-    'pending': '待安排',
-    'scheduled': '已安排',
-    'completed': '已完成',
-    'cancelled': '已取消'
+    'pending': '待确认',
+    'accepted': '已接受',
+    'rejected': '已拒绝',
+    'withdrawn': '已撤回',
+    'pending_onboarding': '待入职'
   }
   return map[status] || status
 }
@@ -198,20 +201,19 @@ const loadData = async () => {
   try {
     loading.value = true
     if (!isCreate.value) {
-      const res = await interviewsApi.getInterview(route.params.id)
-      interview.value = res.data
+      const res = await offersApi.getOffer(route.params.id)
+      offer.value = res.data
       formData.value = {
-        interviewer: res.data.interviewer,
-        round: res.data.round,
-        method: res.data.method,
-        time: res.data.time,
-        location: res.data.location,
-        status: res.data.status,
-        notes: res.data.notes
+        position_title: res.data.position_title,
+        salary_min: res.data.salary_min,
+        salary_max: res.data.salary_max,
+        start_date: res.data.start_date,
+        notes: res.data.notes,
+        status: res.data.status
       }
     }
     
-    const appId = isCreate.value ? route.query.application_id : interview.value?.application_id
+    const appId = isCreate.value ? route.query.application_id : offer.value?.application_id
     if (appId) {
       const [appRes, jobRes, candidateRes] = await Promise.all([
         applicationsApi.getApplication(appId),
@@ -221,6 +223,10 @@ const loadData = async () => {
       application.value = appRes.data
       job.value = jobRes.data
       candidate.value = candidateRes.data
+      
+      if (isCreate.value && job.value) {
+        formData.value.position_title = job.value.title
+      }
     }
   } catch (error) {
     console.error('Failed to load data:', error)
@@ -233,32 +239,41 @@ const enterEditMode = () => {
   isEdit.value = true
 }
 
-const saveInterview = async () => {
+const saveOffer = async () => {
   try {
-    if (!formData.value.time) {
-      alert('请选择面试时间')
+    if (!formData.value.position_title) {
+      alert('请输入职位名称')
       return
     }
-    if (!formData.value.interviewer) {
-      alert('请输入面试官')
+    if (!formData.value.salary_min || !formData.value.salary_max) {
+      alert('请输入薪资范围')
+      return
+    }
+    if (Number(formData.value.salary_min) >= Number(formData.value.salary_max)) {
+      alert('薪资下限不能大于等于上限')
+      return
+    }
+    if (!formData.value.start_date) {
+      alert('请选择入职时间')
       return
     }
     
     if (isCreate.value) {
-      const res = await interviewsApi.createInterview({
+      const res = await offersApi.createOffer({
         ...formData.value,
-        application_id: route.query.application_id
+        application_id: route.query.application_id,
+        interview_id: route.query.interview_id
       })
-      alert('面试安排创建成功')
-      $router.push(`/interviews/${res.data.id}`)
+      alert('Offer创建成功')
+      $router.push(`/offers/${res.data.id}`)
     } else {
-      await interviewsApi.updateInterview(route.params.id, formData.value)
-      alert('面试信息更新成功')
+      await offersApi.updateOffer(route.params.id, formData.value)
+      alert('Offer信息更新成功')
       isEdit.value = false
       await loadData()
     }
   } catch (error) {
-    console.error('Failed to save interview:', error)
+    console.error('Failed to save offer:', error)
     const errorMsg = error.response?.data?.detail || '保存失败，请重试'
     alert(errorMsg)
   }
@@ -266,27 +281,22 @@ const saveInterview = async () => {
 
 const updateStatus = async (status) => {
   try {
-    await interviewsApi.updateStatus(route.params.id, status)
+    await offersApi.updateStatus(route.params.id, status)
     formData.value.status = status
     alert(`状态已更新为: ${getStatusText(status)}`)
     await loadData()
   } catch (error) {
     console.error('Failed to update status:', error)
-    alert('更新失败，请重试')
+    const errorMsg = error.response?.data?.detail || '更新失败，请重试'
+    alert(errorMsg)
   }
 }
 
-const cancelInterview = () => {
-  if (confirm('确定要取消这场面试吗？')) {
-    updateStatus('cancelled')
+const withdrawOffer = () => {
+  if (confirm('确定要撤回这份Offer吗？')) {
+    updateStatus('withdrawn')
   }
 }
-
-watch(() => route.params.id, () => {
-  if (!isCreate.value) {
-    loadData()
-  }
-})
 
 onMounted(() => {
   loadData()
@@ -294,7 +304,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.interview-detail-page {
+.offer-detail-page {
   padding: 20px 0;
 }
 .btn-back {
@@ -374,7 +384,6 @@ onMounted(() => {
   margin-bottom: 6px;
 }
 .form-group input,
-.form-group select,
 .form-group textarea {
   width: 100%;
   padding: 10px 14px;
@@ -386,10 +395,26 @@ onMounted(() => {
   resize: vertical;
 }
 .form-group input:disabled,
-.form-group select:disabled,
 .form-group textarea:disabled {
   background: #fafafa;
   color: #666;
+}
+.salary-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.salary-input input {
+  flex: 1;
+  width: auto;
+}
+.salary-separator {
+  font-size: 16px;
+  color: #999;
+}
+.salary-unit {
+  font-size: 14px;
+  color: #999;
 }
 .info-row {
   display: flex;
@@ -423,17 +448,21 @@ onMounted(() => {
   background: #fff3e0;
   color: #ff9800;
 }
-.status-badge.scheduled {
-  background: #e3f2fd;
-  color: #2196f3;
-}
-.status-badge.completed {
+.status-badge.accepted {
   background: #e8f5e9;
   color: #4caf50;
 }
-.status-badge.cancelled {
+.status-badge.rejected {
+  background: #ffebee;
+  color: #d32f2f;
+}
+.status-badge.withdrawn {
   background: #f5f5f5;
   color: #999;
+}
+.status-badge.pending_onboarding {
+  background: #f3e5f5;
+  color: #9c27b0;
 }
 .status-selector {
   display: flex;
@@ -456,6 +485,59 @@ onMounted(() => {
   background: #667eea;
   color: white;
   border-color: #667eea;
+}
+.timeline {
+  position: relative;
+  padding-left: 20px;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #e0e0e0;
+}
+.timeline-item {
+  position: relative;
+  padding-bottom: 20px;
+}
+.timeline-item:last-child {
+  padding-bottom: 0;
+}
+.timeline-dot {
+  position: absolute;
+  left: -17px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #667eea;
+}
+.timeline-dot.accepted {
+  background: #4caf50;
+}
+.timeline-dot.rejected {
+  background: #d32f2f;
+}
+.timeline-dot.withdrawn {
+  background: #999;
+}
+.timeline-dot.pending_onboarding {
+  background: #9c27b0;
+}
+.timeline-content {
+  padding-left: 10px;
+}
+.timeline-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.timeline-time {
+  font-size: 12px;
+  color: #999;
 }
 .action-buttons {
   display: flex;
@@ -480,20 +562,11 @@ onMounted(() => {
   cursor: pointer;
   font-size: 14px;
 }
-.btn-offer {
-  padding: 12px 24px;
-  background: #ff9800;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-}
-.btn-cancel {
+.btn-withdraw {
   padding: 12px 24px;
   background: white;
-  color: #d32f2f;
-  border: 2px solid #d32f2f;
+  color: #ff9800;
+  border: 2px solid #ff9800;
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;

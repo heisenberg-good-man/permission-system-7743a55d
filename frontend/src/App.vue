@@ -11,6 +11,7 @@
           <router-link to="/applications" class="nav-link">投递记录</router-link>
           <router-link to="/candidates" class="nav-link">候选人管理</router-link>
           <router-link to="/interviews" class="nav-link">面试管理</router-link>
+          <router-link to="/offers" class="nav-link">Offer管理</router-link>
           <router-link to="/profile" class="nav-link">个人中心</router-link>
         </nav>
       </div>

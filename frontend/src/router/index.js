@@ -10,6 +10,8 @@ import CandidateList from '../views/CandidateList.vue'
 import CandidateDetail from '../views/CandidateDetail.vue'
 import InterviewList from '../views/InterviewList.vue'
 import InterviewDetail from '../views/InterviewDetail.vue'
+import OfferList from '../views/OfferList.vue'
+import OfferDetail from '../views/OfferDetail.vue'
 import Profile from '../views/Profile.vue'
 
 const routes = [
@@ -24,6 +26,8 @@ const routes = [
   { path: '/candidates/:id', name: 'CandidateDetail', component: CandidateDetail },
   { path: '/interviews', name: 'InterviewList', component: InterviewList },
   { path: '/interviews/:id', name: 'InterviewDetail', component: InterviewDetail },
+  { path: '/offers', name: 'OfferList', component: OfferList },
+  { path: '/offers/:id', name: 'OfferDetail', component: OfferDetail },
   { path: '/profile', name: 'Profile', component: Profile }
 ]
 
