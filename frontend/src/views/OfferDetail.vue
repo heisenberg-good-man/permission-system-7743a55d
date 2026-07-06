@@ -6,11 +6,24 @@
       <div class="loading-text">加载中...</div>
     </div>
     <div v-if="!loading">
-      <div class="page-header">
-        <h1>{{ isEdit ? '编辑Offer' : (isCreate ? '创建Offer' : 'Offer详情') }}</h1>
-        <p>{{ job?.title }} - {{ candidate?.name }}</p>
+      <div v-if="notFound" class="error-container">
+        <div class="error-icon">❌</div>
+        <div class="error-title">Offer不存在</div>
+        <div class="error-message">该Offer记录已被删除或不存在</div>
+        <button class="btn-back-home" @click="router.push('/offers')">返回Offer列表</button>
       </div>
-      <div class="detail-container" v-if="offer || isCreate">
+      <div v-else-if="error" class="error-container">
+        <div class="error-icon">⚠️</div>
+        <div class="error-title">加载失败</div>
+        <div class="error-message">{{ error }}</div>
+        <button class="btn-retry" @click="loadData()">重新加载</button>
+      </div>
+      <div v-else>
+        <div class="page-header">
+          <h1>{{ isEdit ? '编辑Offer' : (isCreate ? '创建Offer' : 'Offer详情') }}</h1>
+          <p>{{ job?.title || '未关联职位' }} - {{ candidate?.name || '未关联候选人' }}</p>
+        </div>
+        <div class="detail-container" v-if="offer || isCreate">
         <div class="left-panel">
           <div class="section-card">
             <h3>Offer信息</h3>
@@ -160,13 +173,14 @@
           </div>
         </div>
       </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { offersApi, applicationsApi, jobsApi, candidatesApi, interviewsApi } from '../api'
 
 const route = useRoute()
@@ -178,6 +192,8 @@ const candidate = ref(null)
 const interviews = ref([])
 const latestInterview = ref(null)
 const loading = ref(true)
+const error = ref(null)
+const notFound = ref(false)
 const isCreate = computed(() => route.params.id === 'create')
 const isEdit = ref(false)
 
@@ -235,47 +251,131 @@ const formatDateTime = (dateStr) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+const clearAllData = () => {
+  offer.value = null
+  application.value = null
+  job.value = null
+  candidate.value = null
+  interviews.value = []
+  latestInterview.value = null
+  error.value = null
+  notFound.value = false
+  isEdit.value = false
+  formData.value = {
+    position_title: '',
+    salary_min: '',
+    salary_max: '',
+    start_date: '',
+    notes: '',
+    status: 'pending'
+  }
+}
+
+const loadOfferDetail = async (offerId) => {
+  const res = await offersApi.getOffer(offerId)
+  if (!res.data) {
+    return null
+  }
+  return res.data
+}
+
+const loadApplicationData = async (appId) => {
+  const appRes = await applicationsApi.getApplication(appId)
+  if (!appRes.data) {
+    return null
+  }
+  
+  const [jobRes, candidateRes, interviewsRes] = await Promise.all([
+    jobsApi.getJob(appRes.data.job_id),
+    candidatesApi.getCandidate(appRes.data.candidate_id),
+    interviewsApi.getInterviews({ application_id: appId })
+  ])
+  
+  return {
+    application: appRes.data,
+    job: jobRes.data,
+    candidate: candidateRes.data,
+    interviews: interviewsRes.data
+  }
+}
+
 const loadData = async () => {
   try {
     loading.value = true
-    if (!isCreate.value) {
-      const res = await offersApi.getOffer(route.params.id)
-      offer.value = res.data
-      formData.value = {
-        position_title: res.data.position_title,
-        salary_min: res.data.salary_min,
-        salary_max: res.data.salary_max,
-        start_date: res.data.start_date,
-        notes: res.data.notes,
-        status: res.data.status
-      }
-    }
+    error.value = null
+    notFound.value = false
+    clearAllData()
     
-    const appId = isCreate.value ? route.query.application_id : offer.value?.application_id
-    if (appId) {
-      const [appRes, jobRes, candidateRes, interviewsRes] = await Promise.all([
-        applicationsApi.getApplication(appId),
-        jobsApi.getJob(appId ? (await applicationsApi.getApplication(appId)).data.job_id : ''),
-        candidatesApi.getCandidate(appId ? (await applicationsApi.getApplication(appId)).data.candidate_id : ''),
-        interviewsApi.getInterviews({ application_id: appId })
-      ])
-      application.value = appRes.data
-      job.value = jobRes.data
-      candidate.value = candidateRes.data
-      interviews.value = interviewsRes.data
-      
-      if (interviews.value.length > 0) {
-        latestInterview.value = interviews.value.reduce((latest, current) => {
-          return new Date(current.time) > new Date(latest.time) ? current : latest
-        })
+    const currentId = route.params.id
+    
+    if (currentId === 'create') {
+      const appId = route.query.application_id
+      if (appId) {
+        const appData = await loadApplicationData(appId)
+        if (appData) {
+          application.value = appData.application
+          job.value = appData.job
+          candidate.value = appData.candidate
+          interviews.value = appData.interviews
+          
+          if (appData.interviews.length > 0) {
+            latestInterview.value = appData.interviews.reduce((latest, current) => {
+              return new Date(current.time) > new Date(latest.time) ? current : latest
+            })
+          }
+          
+          if (job.value) {
+            formData.value.position_title = job.value.title
+          }
+        } else {
+          error.value = '关联投递记录不存在或无法获取'
+        }
+      }
+    } else {
+      const offerData = await loadOfferDetail(currentId)
+      if (!offerData) {
+        notFound.value = true
+        return
       }
       
-      if (isCreate.value && job.value) {
-        formData.value.position_title = job.value.title
+      offer.value = offerData
+      formData.value = {
+        position_title: offerData.position_title,
+        salary_min: offerData.salary_min,
+        salary_max: offerData.salary_max,
+        start_date: offerData.start_date,
+        notes: offerData.notes,
+        status: offerData.status
+      }
+      
+      const appId = offerData.application_id
+      if (appId) {
+        const appData = await loadApplicationData(appId)
+        if (appData) {
+          application.value = appData.application
+          job.value = appData.job
+          candidate.value = appData.candidate
+          interviews.value = appData.interviews
+          
+          if (appData.interviews.length > 0) {
+            latestInterview.value = appData.interviews.reduce((latest, current) => {
+              return new Date(current.time) > new Date(latest.time) ? current : latest
+            })
+          }
+        } else {
+          error.value = '无法获取关联投递信息'
+        }
+      } else {
+        error.value = '无法获取关联投递信息'
       }
     }
-  } catch (error) {
-    console.error('Failed to load data:', error)
+  } catch (errorResponse) {
+    console.error('Failed to load data:', errorResponse)
+    if (errorResponse.response?.status === 404) {
+      notFound.value = true
+    } else {
+      error.value = errorResponse.response?.data?.detail || '加载失败，请刷新重试'
+    }
   } finally {
     loading.value = false
   }
@@ -324,16 +424,19 @@ const saveOffer = async () => {
         interview_id: route.query.interview_id
       })
       alert('Offer创建成功')
-      router.push(`/offers/${res.data.id}`)
+      await router.push(`/offers/${res.data.id}`)
+      setTimeout(() => {
+        loadData()
+      }, 100)
     } else {
       await offersApi.updateOffer(route.params.id, formData.value)
       alert('Offer信息更新成功')
       isEdit.value = false
       await loadData()
     }
-  } catch (error) {
-    console.error('Failed to save offer:', error)
-    const errorMsg = error.response?.data?.detail || '保存失败，请重试'
+  } catch (errorResponse) {
+    console.error('Failed to save offer:', errorResponse)
+    const errorMsg = errorResponse.response?.data?.detail || '保存失败，请重试'
     alert(errorMsg)
   }
 }
@@ -344,9 +447,9 @@ const updateStatus = async (status) => {
     formData.value.status = status
     alert(`状态已更新为: ${getStatusText(status)}`)
     await loadData()
-  } catch (error) {
-    console.error('Failed to update status:', error)
-    const errorMsg = error.response?.data?.detail || '更新失败，请重试'
+  } catch (errorResponse) {
+    console.error('Failed to update status:', errorResponse)
+    const errorMsg = errorResponse.response?.data?.detail || '更新失败，请重试'
     alert(errorMsg)
   }
 }
@@ -359,6 +462,12 @@ const withdrawOffer = () => {
 
 onMounted(() => {
   loadData()
+})
+
+onBeforeRouteUpdate((to, from) => {
+  if (to.params.id !== from.params.id) {
+    loadData()
+  }
 })
 </script>
 
@@ -665,5 +774,42 @@ onMounted(() => {
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
+}
+.error-container {
+  text-align: center;
+  padding: 80px 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.error-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+.error-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #333;
+}
+.error-message {
+  font-size: 16px;
+  color: #999;
+  margin-bottom: 24px;
+}
+.btn-back-home,
+.btn-retry {
+  padding: 12px 32px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+.btn-back-home:hover,
+.btn-retry:hover {
+  background: #5a6fd6;
 }
 </style>

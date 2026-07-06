@@ -132,8 +132,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { interviewsApi, applicationsApi, jobsApi, candidatesApi } from '../api'
 
 const route = useRoute()
@@ -291,14 +291,14 @@ const cancelInterview = () => {
   }
 }
 
-watch(() => route.params.id, () => {
-  if (!isCreate.value) {
-    loadData()
-  }
-})
-
 onMounted(() => {
   loadData()
+})
+
+onBeforeRouteUpdate((to, from) => {
+  if (to.params.id !== from.params.id) {
+    loadData()
+  }
 })
 </script>
 
