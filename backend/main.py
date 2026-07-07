@@ -96,6 +96,16 @@ class Offer(BaseModel):
     updated_at: datetime
 
 
+class OfferMessage(BaseModel):
+    id: str
+    offer_id: str
+    sender_id: str
+    sender_type: str
+    content: str
+    message_type: str
+    sent_at: datetime
+
+
 class Stats(BaseModel):
     total_jobs: int
     active_jobs: int
@@ -410,7 +420,7 @@ mock_offers = [
         "position_title": "高级前端工程师",
         "start_date": "2026-07-20T09:00:00",
         "notes": "13薪，年终奖视公司效益而定，入职后享有完善的培训体系",
-        "status": "pending",
+        "status": "draft",
         "created_at": "2026-07-06T14:00:00",
         "updated_at": "2026-07-06T14:00:00"
     },
@@ -439,6 +449,54 @@ mock_offers = [
         "status": "rejected",
         "created_at": "2026-07-04T11:00:00",
         "updated_at": "2026-07-06T09:00:00"
+    }
+]
+
+mock_offer_messages = [
+    {
+        "id": "om-001",
+        "offer_id": "offer-002",
+        "sender_id": "company-tencent",
+        "sender_type": "company",
+        "content": "恭喜您通过面试，我们为您提供产品经理职位Offer，薪资25K-32K，期待您的回复",
+        "message_type": "system",
+        "sent_at": "2026-07-05T10:00:00"
+    },
+    {
+        "id": "om-002",
+        "offer_id": "offer-002",
+        "sender_id": "candidate-003",
+        "sender_type": "candidate",
+        "content": "感谢公司认可！薪资方面能否再沟通一下？我期望的薪资范围是28K-35K",
+        "message_type": "adjustment_request",
+        "sent_at": "2026-07-06T14:00:00"
+    },
+    {
+        "id": "om-003",
+        "offer_id": "offer-002",
+        "sender_id": "company-tencent",
+        "sender_type": "company",
+        "content": "经过评估，我们可以将薪资调整为27K-33K，请查收更新后的Offer",
+        "message_type": "counter_offer",
+        "sent_at": "2026-07-07T10:00:00"
+    },
+    {
+        "id": "om-004",
+        "offer_id": "offer-002",
+        "sender_id": "candidate-003",
+        "sender_type": "candidate",
+        "content": "我接受这份Offer，期待加入团队！",
+        "message_type": "system",
+        "sent_at": "2026-07-07T16:00:00"
+    },
+    {
+        "id": "om-005",
+        "offer_id": "offer-001",
+        "sender_id": "company-bytedance",
+        "sender_type": "company",
+        "content": "Offer已发出，请查收详细条款",
+        "message_type": "system",
+        "sent_at": "2026-07-06T14:00:00"
     }
 ]
 
@@ -803,7 +861,7 @@ def get_offer(offer_id: str):
 
 
 @app.get("/api/offers/{offer_id}/details")
-def get_offer_details(offer_id: str):
+def get_offer_details(offer_id: str, role: Optional[str] = "company"):
     offer = next((o for o in mock_offers if o["id"] == offer_id), None)
     if not offer:
         raise HTTPException(status_code=404, detail="Offer记录不存在")
@@ -814,7 +872,10 @@ def get_offer_details(offer_id: str):
         "job": None,
         "candidate": None,
         "interviews": [],
-        "latest_interview": None
+        "latest_interview": None,
+        "messages": [],
+        "role": role,
+        "available_actions": []
     }
 
     app_id = offer.get("application_id")
@@ -835,6 +896,41 @@ def get_offer_details(offer_id: str):
             result["interviews"] = interviews
             if interviews:
                 result["latest_interview"] = max(interviews, key=lambda x: x["time"])
+
+    messages = [msg for msg in mock_offer_messages if msg["offer_id"] == offer_id]
+    result["messages"] = sorted(messages, key=lambda x: x["sent_at"])
+
+    status = offer["status"]
+    if role == "company":
+        if status == "draft":
+            result["available_actions"] = ["edit", "send", "send_message"]
+        elif status == "pending":
+            result["available_actions"] = ["edit", "withdraw", "send_message"]
+        elif status == "adjustment_requested":
+            result["available_actions"] = ["edit", "re_send", "send_message"]
+        elif status == "accepted":
+            result["available_actions"] = ["view", "send_message"]
+        elif status == "rejected":
+            result["available_actions"] = ["view", "send_message"]
+        elif status == "withdrawn":
+            result["available_actions"] = ["view", "send_message"]
+        elif status == "pending_onboarding":
+            result["available_actions"] = ["view", "send_message"]
+    else:
+        if status == "draft":
+            result["available_actions"] = ["view"]
+        elif status == "pending":
+            result["available_actions"] = ["accept", "reject", "adjustment_request", "send_message"]
+        elif status == "adjustment_requested":
+            result["available_actions"] = ["view", "send_message"]
+        elif status == "accepted":
+            result["available_actions"] = ["view", "send_message"]
+        elif status == "rejected":
+            result["available_actions"] = ["view", "send_message"]
+        elif status == "withdrawn":
+            result["available_actions"] = ["view"]
+        elif status == "pending_onboarding":
+            result["available_actions"] = ["view", "send_message"]
 
     return result
 
@@ -864,7 +960,7 @@ def create_offer(offer: dict):
         "position_title": offer["position_title"],
         "start_date": offer["start_date"],
         "notes": offer.get("notes", ""),
-        "status": "pending",
+        "status": "draft",
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat()
     }
@@ -894,11 +990,12 @@ def update_offer_status(offer_id: str, data: dict):
         raise HTTPException(status_code=404, detail="Offer记录不存在")
     
     new_status = data.get("status")
-    valid_statuses = ["pending", "accepted", "rejected", "withdrawn", "pending_onboarding"]
+    valid_statuses = ["draft", "pending", "adjustment_requested", "accepted", "rejected", "withdrawn", "pending_onboarding"]
     if new_status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"无效的状态值，可选值：{', '.join(valid_statuses)}")
     
     old_status = mock_offers[index]["status"]
+    
     mock_offers[index]["status"] = new_status
     mock_offers[index]["updated_at"] = datetime.now().isoformat()
     
@@ -914,12 +1011,62 @@ def update_offer_status(offer_id: str, data: dict):
         elif new_status == "pending":
             if mock_applications[app_index]["status"] in ["hired", "rejected"]:
                 mock_applications[app_index]["status"] = "interviewing"
+            elif mock_applications[app_index]["status"] == "interviewing":
+                pass
+            else:
+                mock_applications[app_index]["status"] = "interviewing"
         elif new_status == "withdrawn":
+            if mock_applications[app_index]["status"] == "hired":
+                mock_applications[app_index]["status"] = "interviewing"
+        elif new_status == "adjustment_requested":
             if mock_applications[app_index]["status"] == "hired":
                 mock_applications[app_index]["status"] = "interviewing"
         mock_applications[app_index]["updated_at"] = datetime.now().isoformat()
     
     return mock_offers[index]
+
+
+@app.get("/api/offer-messages", response_model=List[OfferMessage])
+def get_offer_messages(offer_id: Optional[str] = None):
+    if offer_id:
+        return [msg for msg in mock_offer_messages if msg["offer_id"] == offer_id]
+    return mock_offer_messages
+
+
+@app.post("/api/offer-messages", response_model=OfferMessage)
+def create_offer_message(data: dict):
+    offer_id = data.get("offer_id")
+    if not offer_id:
+        raise HTTPException(status_code=400, detail="offer_id不能为空")
+    
+    offer = next((o for o in mock_offers if o["id"] == offer_id), None)
+    if not offer:
+        raise HTTPException(status_code=400, detail="Offer记录不存在")
+    
+    sender_type = data.get("sender_type")
+    if sender_type not in ["company", "candidate"]:
+        raise HTTPException(status_code=400, detail="sender_type只能是company或candidate")
+    
+    message_type = data.get("message_type", "text")
+    valid_types = ["text", "system", "adjustment_request", "counter_offer"]
+    if message_type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"message_type只能是{', '.join(valid_types)}")
+    
+    content = data.get("content", "").strip()
+    if not content and message_type != "system":
+        raise HTTPException(status_code=400, detail="消息内容不能为空")
+    
+    new_message = {
+        "id": f"om-{len(mock_offer_messages) + 1:03d}",
+        "offer_id": offer_id,
+        "sender_id": data.get("sender_id", "company" if sender_type == "company" else "candidate"),
+        "sender_type": sender_type,
+        "content": content,
+        "message_type": message_type,
+        "sent_at": datetime.now().isoformat()
+    }
+    mock_offer_messages.append(new_message)
+    return new_message
 
 
 if __name__ == "__main__":
