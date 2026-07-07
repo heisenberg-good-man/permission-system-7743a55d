@@ -1,5 +1,6 @@
 <template>
   <div class="offer-detail-page">
+    <div v-if="toastMessage" class="toast" :class="toastType">{{ toastMessage }}</div>
     <button class="btn-back" @click="$router.back()">← 返回列表</button>
     <div class="loading" v-if="loading">
       <div class="spinner"></div>
@@ -10,7 +11,10 @@
         <div class="error-icon">❌</div>
         <div class="error-title">Offer不存在</div>
         <div class="error-message">该Offer记录已被删除或不存在</div>
-        <button class="btn-back-home" @click="router.push('/offers')">返回Offer列表</button>
+        <div class="error-actions">
+          <button class="btn-back-home" @click="router.push('/offers')">返回Offer列表</button>
+          <button class="btn-back-home" @click="router.push('/applications')">重新选择关联投递</button>
+        </div>
       </div>
       <div v-else-if="error" class="error-container">
         <div class="error-icon">⚠️</div>
@@ -207,8 +211,8 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { offersApi, applicationsApi, jobsApi, candidatesApi, interviewsApi } from '../api'
 
 const route = useRoute()
@@ -225,7 +229,17 @@ const notFound = ref(false)
 const currentMode = ref('create')
 const isEdit = ref(false)
 const relatedDataError = ref(null)
+const toastMessage = ref('')
+const toastType = ref('success')
 let loadRequestId = 0
+
+const showToast = (message, type = 'success') => {
+  toastMessage.value = message
+  toastType.value = type
+  setTimeout(() => {
+    toastMessage.value = ''
+  }, 3000)
+}
 
 const pageTitle = computed(() => {
   if (isEdit.value) return '编辑Offer'
@@ -338,22 +352,35 @@ const loadApplicationData = async (appId) => {
     const appRes = await applicationsApi.getApplication(appId)
     if (!appRes.data) return null
 
-    const [jobRes, candidateRes, interviewsRes] = await Promise.all([
+    const [jobRes, candidateRes, interviewsRes] = await Promise.allSettled([
       jobsApi.getJob(appRes.data.job_id),
       candidatesApi.getCandidate(appRes.data.candidate_id),
       interviewsApi.getInterviews({ application_id: appId })
     ])
 
-    const interviews = interviewsRes.data || []
+    let job = null
+    if (jobRes.status === 'fulfilled' && jobRes.value?.data) {
+      job = jobRes.value.data
+    }
+
+    let candidate = null
+    if (candidateRes.status === 'fulfilled' && candidateRes.value?.data) {
+      candidate = candidateRes.value.data
+    }
+
+    let interviews = []
     let latest = null
-    if (interviews.length > 0) {
-      latest = interviews.reduce((l, c) => new Date(c.time) > new Date(l.time) ? c : l)
+    if (interviewsRes.status === 'fulfilled' && interviewsRes.value?.data) {
+      interviews = interviewsRes.value.data || []
+      if (interviews.length > 0) {
+        latest = interviews.reduce((l, c) => new Date(c.time) > new Date(l.time) ? c : l)
+      }
     }
 
     return {
       application: appRes.data,
-      job: jobRes.data,
-      candidate: candidateRes.data,
+      job: job,
+      candidate: candidate,
       interviews: interviews,
       latest_interview: latest
     }
@@ -433,32 +460,32 @@ const enterEditMode = () => {
 const saveOffer = async () => {
   try {
     if (!route.query.application_id && currentMode.value === 'create') {
-      alert('请先选择投递记录')
+      showToast('请先选择投递记录', 'error')
       return
     }
     if (!formData.value.position_title) {
-      alert('请输入职位名称')
+      showToast('请输入职位名称', 'error')
       return
     }
     if (!formData.value.salary_min || !formData.value.salary_max) {
-      alert('请输入薪资范围（最低和最高）')
+      showToast('请输入薪资范围（最低和最高）', 'error')
       return
     }
     if (Number(formData.value.salary_min) <= 0 || Number(formData.value.salary_max) <= 0) {
-      alert('薪资范围必须为正数')
+      showToast('薪资范围必须为正数', 'error')
       return
     }
     if (Number(formData.value.salary_min) >= Number(formData.value.salary_max)) {
-      alert('薪资下限不能大于等于上限')
+      showToast('薪资下限不能大于等于上限', 'error')
       return
     }
     if (!formData.value.start_date) {
-      alert('请选择入职时间')
+      showToast('请选择入职时间', 'error')
       return
     }
     const startDate = new Date(formData.value.start_date)
     if (startDate <= new Date()) {
-      alert('入职时间必须在未来')
+      showToast('入职时间必须在未来', 'error')
       return
     }
 
@@ -470,73 +497,67 @@ const saveOffer = async () => {
       })
       const newId = res.data?.id
       if (!newId) {
-        alert('创建成功但返回数据异常，请返回列表查看')
+        showToast('创建成功但返回数据异常，请返回列表查看', 'error')
         await router.push('/offers')
         return
       }
-      alert('Offer创建成功')
+      showToast('Offer创建成功')
 
-      // 立即用详情接口拉取最新数据并展示，确保页面显示完整的新 Offer
-      let preloaded = false
-      try {
-        const detailRes = await offersApi.getOfferDetails(newId)
-        if (detailRes.data?.offer) {
-          currentMode.value = 'detail'
-          isEdit.value = false
-          applyOfferDetail(detailRes.data)
-          preloaded = true
-        }
-      } catch (e) {
-        console.warn('Preload offer detail failed, will retry after route change:', e)
-      }
-
-      // 切换路由到真实 Offer 地址
-      // - 预填成功时，watch 会检测到 newId === offer.value.id 跳过重复加载，避免闪烁
-      // - 预填失败时，watch 正常触发 loadData 重新加载
       await router.replace({ path: `/offers/${newId}`, query: {} })
       await nextTick()
-      if (!preloaded && route.params.id === newId) {
-        loadData(newId, {})
-      }
+      await loadData(newId, {})
     } else {
       await offersApi.updateOffer(route.params.id, formData.value)
-      alert('Offer信息更新成功')
+      showToast('Offer信息更新成功')
       isEdit.value = false
-      loadData()
+      await loadData()
     }
   } catch (errorResponse) {
     console.error('Failed to save offer:', errorResponse)
     const errorMsg = errorResponse.response?.data?.detail || '保存失败，请重试'
-    alert(errorMsg)
+    showToast(errorMsg, 'error')
   }
 }
 
 const updateStatus = async (status) => {
   try {
     await offersApi.updateStatus(route.params.id, status)
-    alert(`状态已更新为: ${getStatusText(status)}`)
-    loadData()
+    showToast(`状态已更新为: ${getStatusText(status)}`)
+    await loadData()
   } catch (errorResponse) {
     console.error('Failed to update status:', errorResponse)
     const errorMsg = errorResponse.response?.data?.detail || '更新失败，请重试'
-    alert(errorMsg)
+    showToast(errorMsg, 'error')
   }
 }
 
 const withdrawOffer = () => {
-  if (confirm('确定要撤回这份Offer吗？')) {
-    updateStatus('withdrawn')
-  }
+  updateStatus('withdrawn')
 }
+
+onMounted(() => {
+  loadData()
+})
+
+onBeforeRouteUpdate(async (to, from) => {
+  const newId = to.params.id
+  const oldId = from.params.id
+  const newAppId = to.query.application_id
+  const oldAppId = from.query.application_id
+  const newInterviewId = to.query.interview_id
+  const oldInterviewId = from.query.interview_id
+  
+  if (newId !== oldId || newAppId !== oldAppId || newInterviewId !== oldInterviewId) {
+    await loadData(newId, to.query)
+  }
+})
 
 watch(() => [route.params.id, route.query.application_id, route.query.interview_id],
   ([newId, newAppId, newInterviewId], [oldId, oldAppId, oldInterviewId]) => {
     if (newId === oldId && newAppId === oldAppId && newInterviewId === oldInterviewId) return
-    // 保存创建后 router.replace 切到新 id，若该 id 已通过预填加载完成，跳过重复加载避免闪烁
-    if (newId !== 'create' && newId === offer.value?.id && !error.value && !notFound.value) return
     loadData(newId, route.query)
   },
-  { immediate: true }
+  { immediate: false }
 )
 </script>
 
@@ -553,6 +574,33 @@ watch(() => [route.params.id, route.query.application_id, route.query.interview_
   font-size: 14px;
   margin-bottom: 20px;
   transition: all 0.2s;
+}
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  z-index: 9999;
+  animation: slideIn 0.3s ease-out;
+}
+.toast.success {
+  background: #52c41a;
+}
+.toast.error {
+  background: #ff4d4f;
+}
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 .btn-back:hover {
   background: #f5f5f5;
